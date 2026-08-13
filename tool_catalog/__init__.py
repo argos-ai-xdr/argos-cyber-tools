@@ -12,8 +12,11 @@ import pathlib
 import yaml
 from jsonschema import Draft202012Validator
 
+from tool_catalog.signatures import verify_integrity_manifest
+
 _SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "schemas" / "tool-definition.schema.json"
 _DEFINITIONS_DIR = pathlib.Path(__file__).resolve().parent / "definitions"
+_MANIFEST_PATH = pathlib.Path(__file__).resolve().parent / "signatures" / "catalog.manifest.json"
 
 
 class InvalidToolDefinition(Exception):
@@ -25,6 +28,19 @@ class InvalidToolDefinition(Exception):
 
 class ToolNotFound(KeyError):
     pass
+
+
+class CatalogIntegrityError(Exception):
+    """tool_catalog/signatures/ ya implementaba y probaba
+    verify_integrity_manifest, pero load_catalog() nunca lo invocaba — el
+    catálogo real que usa mcp_gateway.Gateway para autorizar llamadas se
+    cargaba sin comprobar integridad en absoluto, pese a que el docstring de
+    tool_catalog/signatures/__init__.py ya documentaba esa comprobación como
+    el propósito del módulo."""
+
+    def __init__(self, mismatches: list[str]):
+        super().__init__(f"Integridad del catálogo comprometida: {mismatches}")
+        self.mismatches = mismatches
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,8 +87,24 @@ def load_definition(path: pathlib.Path) -> ToolDefinition:
     return ToolDefinition.from_dict(data)
 
 
-def load_catalog(definitions_dir: pathlib.Path | None = None) -> dict[str, ToolDefinition]:
+def load_catalog(
+    definitions_dir: pathlib.Path | None = None,
+    *,
+    manifest_path: pathlib.Path | None = None,
+) -> dict[str, ToolDefinition]:
     directory = definitions_dir or _DEFINITIONS_DIR
+
+    # Solo se exige el manifiesto por defecto cuando se usa el directorio de
+    # definiciones por defecto: un definitions_dir explícito (tests, catálogos
+    # sintéticos) no tiene un manifiesto correspondiente y no debería
+    # obligarse a firmar uno solo para poder probar load_catalog.
+    effective_manifest_path = manifest_path if manifest_path is not None else (_MANIFEST_PATH if definitions_dir is None else None)
+    if effective_manifest_path is not None and effective_manifest_path.exists():
+        manifest = json.loads(effective_manifest_path.read_text(encoding="utf-8"))
+        mismatches = verify_integrity_manifest(directory, manifest)
+        if mismatches:
+            raise CatalogIntegrityError(mismatches)
+
     catalog: dict[str, ToolDefinition] = {}
     for path in sorted(directory.glob("*.yaml")):
         tool = load_definition(path)
