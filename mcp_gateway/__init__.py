@@ -12,6 +12,7 @@ import datetime
 import uuid
 
 from policies.approval import ApprovalRejected, ApprovalStore
+from policies.target_allowlists import load_target_allowlists
 from tool_catalog import ToolDefinition, ToolNotFound, load_catalog
 
 
@@ -48,7 +49,7 @@ class Gateway:
         approval_store: ApprovalStore | None = None,
     ):
         self._catalog = catalog if catalog is not None else load_catalog()
-        self._target_allowlists = target_allowlists or {}
+        self._target_allowlists = target_allowlists if target_allowlists is not None else load_target_allowlists()
         self._approval_store = approval_store or ApprovalStore()
 
     def authorize(self, request: ToolCallRequest, *, current_plan_hash: str | None = None) -> AuthorizationResult:

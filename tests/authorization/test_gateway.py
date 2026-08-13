@@ -128,6 +128,27 @@ def test_unknown_tool_raises():
         )
 
 
+def test_gateway_without_explicit_allowlist_loads_the_real_one_from_disk():
+    """Regresión: Gateway() sin target_allowlists explícito caía a {}
+    (denegar todo target-allowlisted), no porque el target realmente no
+    estuviera permitido sino porque nada cargaba
+    policies/target-allowlists/*.yaml — el mismo dato que policies/opa/
+    ya documenta como el ground truth. Mismo patrón que catalog=None (que sí
+    caía a load_catalog())."""
+    gateway = Gateway()  # sin target_allowlists explícito
+    result = gateway.authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload",
+            target="deployment/gseg-simulado",  # el target real de policies/target-allowlists/isolate_kubernetes_workload.yaml
+            action="dry-run",
+            subject="langgraph",
+            caller_token="t",
+            granted_scopes=frozenset({"cyber.response.execute"}),
+        )
+    )
+    assert result.allowed is True
+
+
 def test_downstream_credential_is_never_the_caller_token_across_many_calls():
     """Chequeo estructural: en 50 llamadas, la credencial descendente nunca
     coincide con el token del llamante — ninguna casualidad de hash."""
