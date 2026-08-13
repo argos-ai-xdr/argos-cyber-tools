@@ -40,7 +40,13 @@ def test_mark_rolled_back_updates_status_and_reference(contracts_path):
     updated = mark_rolled_back(contracts_path, action, rb)
 
     assert updated["status"] == "rolled_back"
-    assert updated["rollback_ref"] == rb["action_id"]
+    # rollback_ref debe ser el "id" único de rb, no su action_id: original y
+    # rollback comparten el MISMO action_id ("pol-3" en ambos, caso real),
+    # así que si rollback_ref fuera rb["action_id"] coincidiría con el
+    # action_id del propio original y no apuntaría a ningún registro
+    # concreto (bug real encontrado así).
+    assert updated["rollback_ref"] == rb["id"]
+    assert updated["rollback_ref"] != updated["action_id"]
     assert action["status"] == "succeeded"  # el original NO se mutó
 
 

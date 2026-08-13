@@ -119,8 +119,18 @@ def rollback_scale_to_zero(
 def mark_rolled_back(contracts_path, original_action_result: dict, rollback_action_result: dict) -> dict:
     """Devuelve una COPIA del ActionResult original con status='rolled_back'
     y rollback_ref apuntando al ActionResult de rollback — el original en sí
-    no se muta (ya pudo quedar escrito en evidence_writer)."""
-    updated = {**original_action_result, "status": "rolled_back", "rollback_ref": rollback_action_result["action_id"]}
+    no se muta (ya pudo quedar escrito en evidence_writer).
+
+    rollback_ref usa el "id" del envelope (único por ActionResult), no
+    "action_id": action_id es la referencia COMPARTIDA a la decisión que se
+    ejecuta (original, reintentos y rollback usan el mismo action_id — ver
+    executors/README.md), así que usarlo como rollback_ref producía un
+    valor idéntico al action_id del propio original: una referencia que no
+    apuntaba a ningún registro en concreto. Encontrado porque el test
+    existente pasaba el MISMO action_id a la acción original y a su
+    rollback (caso realista), lo que ocultaba que ambos valores coincidían.
+    """
+    updated = {**original_action_result, "status": "rolled_back", "rollback_ref": rollback_action_result["id"]}
 
     registry = build_registry(contracts_path)
     errors = validate_payload(contracts_path, registry, "action-result", updated)

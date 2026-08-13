@@ -8,3 +8,5 @@
 | [`evidence_verifier.py`](evidence_verifier.py) | — | `verify_artifact_integrity` es real (hash SHA-256); el cliente remoto hacia `evidence_writer` es interfaz pendiente (ARG-023) |
 
 Ningún executor de aquí se invoca sin pasar por `mcp_gateway.Gateway.authorize` primero — eso es responsabilidad del llamador (Shuffle, `shuffle/playbooks/`), no de este módulo.
+
+`action_id` en un ActionResult es la referencia COMPARTIDA a la decisión que se ejecuta (el `decision_id` del PolicyDecision, vía la Approval) — la ejecución original, sus reintentos idempotentes y su rollback llevan el MISMO `action_id`. El identificador único de un ActionResult concreto es `id` (el campo del envelope), no `action_id`; `rollback/strategies.py` usa `id` para `rollback_ref` por esta razón (ver su docstring — bug real encontrado ahí).
