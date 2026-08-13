@@ -1,0 +1,16 @@
+# Segunda alternativa de contención para severidad critical en
+# argos-core/services/recommendation. Mismo nivel de riesgo que
+# isolate_kubernetes_workload: ambas modifican el estado de un workload.
+name: scale_to_zero
+version: 1.0.0
+risk_level: high
+mode:
+  - dry-run
+  - execute
+required_scope: cyber.response.execute
+approval_required: true
+idempotent: true
+timeout_seconds: 30
+target_allowlist_required: true
+rollback_supported: true
+evidence_required: true

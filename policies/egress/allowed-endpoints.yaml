@@ -1,0 +1,22 @@
+# Egress deny por defecto (ADR-003, argos-platform/kubernetes/network-policies/
+# default-deny.yaml). Todo lo que mcp_gateway/executors necesitan alcanzar
+# se declara aquí explícitamente; cualquier destino no listado se deniega.
+allowed_endpoints:
+  - name: opa
+    description: "Policy Decision Point (argos-platform, plano P3)"
+    host: "opa.argos-policy.svc.cluster.local"
+    port: 8181
+  - name: kubernetes-api
+    description: "API del cyber-range para los executors (namespace argos-cyber-range)"
+    host: "kubernetes.default.svc.cluster.local"
+    port: 443
+  - name: evidence-writer
+    description: "argos-core/services/evidence_writer — única escritura de evidencia"
+    host: "evidence-writer.argos-xdr.svc.cluster.local"
+    port: 8080
+
+# Explícitamente NO permitido, documentado para que quede claro que es una
+# decisión y no un olvido:
+denied_by_design:
+  - "Cualquier endpoint fuera del clúster (egress a Internet) durante la ejecución de aceptación (regla de reproducibilidad offline)"
+  - "El endpoint de argos-smartops (approval API) — mcp_gateway solo LEE Approval ya emitidas, no las solicita activamente"

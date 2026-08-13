@@ -1,0 +1,39 @@
+[project]
+name = "argos-cyber-tools"
+version = "0.1.0-dev"
+description = "MCP gateway, tool catalog, policies, executors y rollback de argos-ai-xdr"
+requires-python = ">=3.11"
+dependencies = [
+  "pyyaml>=6.0",
+  "jsonschema>=4.18",
+  "referencing>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Paquetes de código en la raíz del repo (sandbox/ y shuffle/ son config/datos,
+# no paquetes Python — no aparecen aquí a propósito).
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tool_catalog*", "mcp_gateway*", "mcp_servers*", "executors*", "policies*", "rollback*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

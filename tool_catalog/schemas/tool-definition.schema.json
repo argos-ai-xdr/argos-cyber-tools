@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/argos-ai-xdr/argos-cyber-tools/tool_catalog/schemas/tool-definition.schema.json",
+  "title": "Definición de herramienta MCP",
+  "description": "Todo campo es obligatorio y explícito a propósito (documento maestro v0.5: 'Definición obligatoria de cada tool') — nunca hay un valor por defecto implícito para approval_required, idempotent ni rollback_supported.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "risk_level",
+    "mode",
+    "required_scope",
+    "approval_required",
+    "idempotent",
+    "timeout_seconds",
+    "target_allowlist_required",
+    "rollback_supported",
+    "evidence_required"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "mode": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["read-only", "dry-run", "execute"]
+      }
+    },
+    "required_scope": {
+      "type": "string",
+      "description": "Scope OIDC exigido por mcp_gateway, p. ej. cyber.response.execute"
+    },
+    "approval_required": { "type": "boolean" },
+    "idempotent": { "type": "boolean" },
+    "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+    "target_allowlist_required": { "type": "boolean" },
+    "rollback_supported": { "type": "boolean" },
+    "evidence_required": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "risk_level": { "enum": ["high", "critical"] } } },
+      "then": {
+        "properties": {
+          "approval_required": { "const": true },
+          "target_allowlist_required": { "const": true }
+        },
+        "required": ["approval_required", "target_allowlist_required"]
+      }
+    },
+    {
+      "if": { "properties": { "mode": { "contains": { "const": "execute" } } } },
+      "then": {
+        "properties": { "evidence_required": { "const": true } },
+        "required": ["evidence_required"]
+      }
+    }
+  ]
+}

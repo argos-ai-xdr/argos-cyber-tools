@@ -1,0 +1,6 @@
+# Misma allowlist que policies/opa/isolate_kubernetes_workload.rego,
+# en forma de datos para que mcp_gateway (Python) no tenga que parsear Rego.
+# Si estos dos archivos divergen, es un bug — no una decisión válida.
+tool: isolate_kubernetes_workload
+allowlist:
+  - deployment/gseg-simulado

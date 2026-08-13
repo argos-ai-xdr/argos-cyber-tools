@@ -1,0 +1,17 @@
+# Ejemplo canónico del documento maestro v0.5 ("Definición obligatoria de
+# cada tool"). Coincide con argos-contracts-scenarios/scenarios/ARGOS-CYB-01/
+# policies/isolate-kubernetes-workload.rego y con la acción del mismo nombre
+# en argos-core/services/recommendation (runbook de severidad high/critical).
+name: isolate_kubernetes_workload
+version: 1.0.0
+risk_level: high
+mode:
+  - dry-run
+  - execute
+required_scope: cyber.response.execute
+approval_required: true
+idempotent: true
+timeout_seconds: 30
+target_allowlist_required: true
+rollback_supported: true
+evidence_required: true

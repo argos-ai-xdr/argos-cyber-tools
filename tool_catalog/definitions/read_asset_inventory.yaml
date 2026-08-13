@@ -1,0 +1,14 @@
+# Herramienta de solo lectura expuesta por mcp_servers/assets/. No hay
+# execute, por lo que no exige evidence_required ni allowlist de destino.
+name: read_asset_inventory
+version: 1.0.0
+risk_level: low
+mode:
+  - read-only
+required_scope: cyber.read.assets
+approval_required: false
+idempotent: true
+timeout_seconds: 10
+target_allowlist_required: false
+rollback_supported: false
+evidence_required: false

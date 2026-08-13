@@ -1,0 +1,15 @@
+# CODEOWNERS — sustituir los roles por handles de GitHub durante S1.
+# Roles: ver argos-control/governance/raci/raci.md
+# Este es el repositorio de mayor criticidad del proyecto: casi todo exige
+# revisión de qa-security-observer, no solo de soar-mcp.
+
+*                          @delivery-lead @soar-mcp @qa-security-observer
+
+/mcp_gateway/              @soar-mcp @qa-security-observer
+/policies/                 @soar-mcp @qa-security-observer
+/policies/approval/        @qa-security-observer
+/executors/                @soar-mcp @qa-security-observer
+/rollback/                 @soar-mcp @qa-security-observer
+/sandbox/                  @platform-sre @qa-security-observer
+/tool_catalog/signatures/  @qa-security-observer
+/tests/adversarial/        @qa-security-observer

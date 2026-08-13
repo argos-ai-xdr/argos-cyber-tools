@@ -1,0 +1,42 @@
+# Se aplica sobre la base default-deny de argos-platform/kubernetes/
+# network-policies/default-deny.yaml. Egress de los pods executor limitado
+# exactamente a lo declarado en ../../policies/egress/allowed-endpoints.yaml
+# — cambiar uno sin el otro es un bug.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argos-executor-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: cyber-tools-executor
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: opa
+      ports:
+        - protocol: TCP
+          port: 8181
+    - to:
+        - podSelector:
+            matchLabels:
+              app: evidence-writer
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Kubernetes API: el control-plane no es un pod del namespace, así que
+    # NetworkPolicy exige un ipBlock (no admite un nombre DNS). 0.0.0.0/0
+    # anularía por completo el egress-deny de este repositorio — TODO
+    # (ARG-003): sustituir por el CIDR real del API server del clúster de
+    # argos-platform en cuanto se conozca; hasta entonces, esta regla queda
+    # comentada y el acceso al API server pasa por el proxy de
+    # executors/kubernetes.py contra FakeClusterState, no por red real.
+    # - to:
+    #     - ipBlock:
+    #         cidr: "TODO: CIDR real del API server, nunca 0.0.0.0/0"
+    #   ports:
+    #     - protocol: TCP
+    #       port: 443

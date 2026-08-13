@@ -1,0 +1,4 @@
+# Misma allowlist que policies/opa/scale_to_zero.rego, en forma de datos.
+tool: scale_to_zero
+allowlist:
+  - deployment/gseg-simulado

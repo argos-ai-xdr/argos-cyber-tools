@@ -1,0 +1,18 @@
+# Compone qué perfil de aislamiento aplica a los pods de executors/ —
+# referenciado desde deploy/helm (cuando exista, mismo patrón que
+# argos-platform/kubernetes/pod-security/) en vez de que cada Deployment
+# declare sus propias rutas de perfil a mano.
+name: executor-default
+applies_to:
+  - executors/kubernetes.py
+  - executors/scale_to_zero.py
+pod_security_standard: restricted # ver argos-platform/kubernetes/pod-security/README.md
+seccomp_profile: ../seccomp/executor-default.json
+apparmor_profile: ../apparmor/executor-default
+network_policy: ../network/executor-egress.yaml
+security_context:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

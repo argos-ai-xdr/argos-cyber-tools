@@ -1,0 +1,16 @@
+# Acción de severidad medium en argos-core/services/recommendation. No
+# modifica el workload — solo eleva verbosidad de telemetría — por eso
+# risk_level medium y sin exigencia de allowlist de destino.
+name: increase_monitoring
+version: 1.0.0
+risk_level: medium
+mode:
+  - dry-run
+  - execute
+required_scope: cyber.response.monitor
+approval_required: false
+idempotent: true
+timeout_seconds: 15
+target_allowlist_required: false
+rollback_supported: true
+evidence_required: true

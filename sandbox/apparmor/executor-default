@@ -1,0 +1,29 @@
+#include <tunables/global>
+
+profile argos-executor-default flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Ejecutable Python del executor y sus librerías — solo lectura.
+  /usr/bin/python3.11 ix,
+  /usr/lib/python3.11/** r,
+  /app/** r,
+
+  # Sin acceso al filesystem del host más allá de /tmp del propio contenedor.
+  /tmp/** rw,
+
+  # Red saliente permitida solo hacia lo declarado en
+  # ../../policies/egress/allowed-endpoints.yaml — AppArmor no filtra por
+  # host/puerto (eso lo hace la NetworkPolicy de ../network/), aquí solo se
+  # habilita el syscall de socket en sí.
+  network inet stream,
+  network inet6 stream,
+
+  # Denegar explícitamente lo que un contenedor "restricted" no necesita.
+  deny /proc/sys/** w,
+  deny mount,
+  deny umount,
+  deny ptrace,
+  deny capability sys_admin,
+  deny capability sys_ptrace,
+  deny capability net_admin,
+}

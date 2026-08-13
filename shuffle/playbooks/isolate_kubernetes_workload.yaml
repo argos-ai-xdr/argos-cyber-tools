@@ -1,0 +1,43 @@
+# Playbook de referencia (no un export real de Shuffle — sin instancia
+# desplegada todavía, ARG-021). Describe la secuencia obligatoria
+# read-only → dry-run → approval → execute → verify → rollback y qué
+# módulo Python de este repositorio implementa cada paso, para que ARG-021
+# tenga un mapa 1:1 al construir el workflow real en Shuffle.
+name: isolate_kubernetes_workload
+tool: isolate_kubernetes_workload
+trigger: "Recommendation.selected_action == isolate_kubernetes_workload (argos-core)"
+steps:
+  - id: authorize_dry_run
+    description: "mcp_gateway valida scope + allowlist; sin Approval todavía"
+    implementation: mcp_gateway.Gateway.authorize
+    on_deny: "detener el playbook; registrar PolicyDecision"
+
+  - id: dry_run
+    description: "Simula el aislamiento sin aplicar el efecto"
+    implementation: executors.kubernetes.KubernetesExecutor.isolate_workload(dry_run=True)
+
+  - id: request_approval
+    description: "Presenta el dry-run al operador vía argos-smartops"
+    implementation: "argos-smartops (repositorio distinto) — fuera del alcance de este playbook"
+
+  - id: authorize_execute
+    description: "mcp_gateway valida la Approval (TTL, anti-replay, plan_hash, segregación)"
+    implementation: mcp_gateway.Gateway.authorize
+    on_deny: "detener el playbook; nunca se llega a execute"
+
+  - id: execute
+    description: "Aplica el aislamiento real"
+    implementation: executors.kubernetes.KubernetesExecutor.isolate_workload(dry_run=False)
+
+  - id: verify
+    description: "Confirma el efecto de forma independiente"
+    implementation: "executors.kubernetes.KubernetesExecutor (campo 'verification' del ActionResult)"
+
+  - id: rollback_if_failed
+    description: "Solo si verify falla o se activa el kill switch"
+    implementation: rollback.strategies.rollback_isolation
+    condition: "verify.passed == false OR kill_switch_triggered"
+
+  - id: write_evidence
+    description: "Cada paso anterior produce un ActionResult; argos-core/services/evidence_writer los persiste"
+    implementation: "argos-core (repositorio distinto)"
