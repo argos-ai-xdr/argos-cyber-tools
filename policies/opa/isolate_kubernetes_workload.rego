@@ -1,13 +1,10 @@
 # Política autoritativa para isolate_kubernetes_workload (ADR-005, ADR-011).
-# argos-contracts-scenarios/scenarios/ARGOS-CYB-01/policies/ contiene una
-# copia DESACTUALIZADA (usa target_allowlist a nivel de namespace,
-# "namespace/argos-cyber-range") — este repositorio es el dueño de la
-# política real y usa granularidad de recurso (deployment concreto), más
-# restrictiva: una allowlist de namespace autorizaría implícitamente
-# CUALQUIER deployment de ese namespace, no solo el activo del escenario.
+# argos-contracts-scenarios/scenarios/ARGOS-CYB-01/policies/ es una copia de
+# referencia (documental, nadie la carga en tiempo de ejecución) que usaba
+# target_allowlist a nivel de namespace en vez de recurso concreto —
+# desalineada de la política real, ya corregida para que coincida con esta.
 # Ver argos-validation (evaluators/tool_calls) donde se documentó por
-# primera vez esta inconsistencia entre repos — pendiente actualizar la
-# copia de argos-contracts-scenarios para que coincida con esta.
+# primera vez esta inconsistencia entre repos.
 package argos.cyber_tools.isolate_kubernetes_workload
 
 import future.keywords.if
