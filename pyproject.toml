@@ -25,7 +25,7 @@ build-backend = "setuptools.build_meta"
 # no paquetes Python — no aparecen aquí a propósito).
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["tool_catalog*", "mcp_gateway*", "mcp_servers*", "executors*", "policies*", "rollback*"]
+include = ["tool_catalog*", "mcp_gateway*", "mcp_servers*", "executors*", "policies*", "rollback*", "graph*"]
 
 [tool.ruff]
 line-length = 100
