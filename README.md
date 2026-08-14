@@ -18,7 +18,7 @@ Ninguna fase se salta. El LLM (`argos-core/services/recommendation`) nunca llama
 | --- | --- | --- |
 | `mcp_gateway/` | Punto de entrada único: valida audience, scope, allowlist, timeout; nunca reenvía el token del llamante | Real |
 | `mcp_servers/` | Servidores de solo lectura (assets, vulnerabilities, cti, kubernetes-read, network-read, evidence-read) | Interfaz + real donde no requiere red |
-| `graph/` | C-07: grafo RBAC/red (ARG-011 exposición), escalada de privilegio (ARG-012), validación de attack path (ARG-013) y blast radius (ARG-014) | Real sobre manifiestos, sin clúster |
+| `graph/` | C-07: grafo RBAC/red y exposición (ARG-011), escalada de privilegio (ARG-012), validación de attack path (ARG-013) y blast radius (ARG-014) | ARG-011/012 real; ARG-013/014 en curso |
 | `tool_catalog/` | Definición firmable de cada herramienta (`schemas/`, `definitions/`, `risk-levels/`, `signatures/`) | Real |
 | `policies/` | OPA (`opa/`), aprobación con TTL/anti-replay (`approval/`), allowlists (`target-allowlists/`), egress (`egress/`) | Real |
 | `executors/` | Ejecutores idempotentes (`kubernetes`, `cilium`, `scale_to_zero`, `evidence_verifier`) | Real donde no requiere clúster |
