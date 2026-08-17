@@ -44,4 +44,4 @@ mTLS/OIDC, audience exacta, scope por herramienta, sin token passthrough, target
 
 ## Reglas comunes de la organización
 
-Rama `main` protegida, PR obligatorio, `CODEOWNERS` reforzado en este repositorio (ver más abajo), sin push directo/force-push. Ver `docs/development.md`.
+Rama `main` protegida, PR obligatorio, `CODEOWNERS` reforzado en este repositorio (ver más abajo), sin push directo/force-push. Ver `docs/development.md`. Paquete cyber-range (ARG-028): `docs/cyber-range-package.md`. Runbooks reales por herramienta: `runbooks/`.
