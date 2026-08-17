@@ -57,8 +57,24 @@ def test_scale_to_zero_then_rollback_restores_original_replicas(contracts_path):
     executor.scale_to_zero(run_id="r2", target="deployment/y", dry_run=False, idempotency_key="k-4", action_id="pol-4")
     assert executor.state.current_replicas("deployment/y") == 0
 
-    rollback_scale_to_zero(
+    rb = rollback_scale_to_zero(
         contracts_path, executor.state, run_id="r2", target="deployment/y", idempotency_key="k-4-rb", action_id="pol-4"
     )
     assert verify_replicas_restored(executor.state, "deployment/y")
     assert executor.state.current_replicas("deployment/y") == 4
+    assert rb["changed_resources"] == ["deployment/y"]  # de verdad revirtió algo
+
+
+def test_rollback_scale_to_zero_when_nothing_was_scaled_is_a_noop_not_a_false_change(contracts_path):
+    """Regresión real: rollback_scale_to_zero reportaba changed_resources=[target]
+    incondicionalmente, incluso para un target que nunca se había escalado
+    a cero — una afirmación falsa en la evidencia (el estado antes y
+    después es idéntico, 1 réplica). Mismo principio que
+    test_rollback_when_nothing_was_isolated_is_a_noop_not_an_error para
+    isolation, que sí lo comprobaba; scale_to_zero no tenía el equivalente."""
+    executor = ScaleToZeroExecutor(contracts_path)
+    rb = rollback_scale_to_zero(
+        contracts_path, executor.state, run_id="r2", target="deployment/never-scaled", idempotency_key="k-5-rb", action_id="pol-5"
+    )
+    assert rb["changed_resources"] == []
+    assert rb["verification"]["passed"] is True

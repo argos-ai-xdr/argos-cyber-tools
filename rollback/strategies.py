@@ -86,6 +86,7 @@ def rollback_scale_to_zero(
         return cached
 
     original = state.original_replicas(target)
+    was_scaled_down = state.current_replicas(target) == 0
     started_at = datetime.datetime.now(datetime.UTC).isoformat()
     state.replicas[target] = (original, original)  # restaura al valor original conocido
     ended_at = datetime.datetime.now(datetime.UTC).isoformat()
@@ -98,10 +99,16 @@ def rollback_scale_to_zero(
         "started_at": started_at,
         "ended_at": ended_at,
         "status": "succeeded",
-        "changed_resources": [target],
+        # Solo si de verdad estaba a 0 réplicas hay algo que restaurar —
+        # mismo principio que rollback_isolation con was_isolated. Antes
+        # se reportaba [target] siempre, incluso cuando el target nunca se
+        # había escalado a cero: una afirmación falsa en la evidencia (un
+        # ActionResult no debe declarar un recurso "cambiado" si el
+        # estado real antes y después es idéntico).
+        "changed_resources": [target] if was_scaled_down else [],
         "verification": {
             "passed": state.current_replicas(target) == original,
-            "detail": f"réplicas restauradas a {original} para {target}",
+            "detail": f"réplicas restauradas a {original} para {target}" if was_scaled_down else "no había escalado a cero que revertir",
         },
     }
     envelope = build_envelope(payload, producer="scale-to-zero-executor-rollback", run_id=run_id, message_id=result_id)
