@@ -14,3 +14,6 @@ timeout_seconds: 30
 target_allowlist_required: true
 rollback_supported: true
 evidence_required: true
+side_effect_class: REVERSIBLE_WRITE
+rate_limit:
+  calls_per_minute: 5

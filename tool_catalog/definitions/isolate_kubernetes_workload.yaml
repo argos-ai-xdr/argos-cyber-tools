@@ -15,3 +15,9 @@ timeout_seconds: 30
 target_allowlist_required: true
 rollback_supported: true
 evidence_required: true
+# ADR-019: rollback_supported=true + idempotent=true -> REVERSIBLE_WRITE,
+# no IRREVERSIBLE, pese a risk_level=high (el riesgo alto exige approval,
+# no lo convierte en irreversible).
+side_effect_class: REVERSIBLE_WRITE
+rate_limit:
+  calls_per_minute: 5

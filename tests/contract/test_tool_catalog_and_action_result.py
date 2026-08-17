@@ -73,7 +73,8 @@ def test_load_catalog_rejects_tampered_definitions(tmp_path):
     (definitions_dir / "t1.yaml").write_text(
         "name: t1\nversion: 1.0.0\nrisk_level: low\nmode: [read-only]\nrequired_scope: s\n"
         "approval_required: false\nidempotent: true\ntimeout_seconds: 30\n"
-        "target_allowlist_required: false\nrollback_supported: false\nevidence_required: false\n",
+        "target_allowlist_required: false\nrollback_supported: false\nevidence_required: false\n"
+        "side_effect_class: READ_ONLY\nrate_limit: {calls_per_minute: 60}\n",
         encoding="utf-8",
     )
     manifest = build_integrity_manifest(definitions_dir)
@@ -88,7 +89,8 @@ def test_load_catalog_rejects_tampered_definitions(tmp_path):
     (definitions_dir / "t1.yaml").write_text(
         "name: t1\nversion: 1.0.0\nrisk_level: low\nmode: [read-only]\nrequired_scope: s\n"
         "approval_required: true\nidempotent: true\ntimeout_seconds: 30\n"
-        "target_allowlist_required: false\nrollback_supported: false\nevidence_required: false\n",
+        "target_allowlist_required: false\nrollback_supported: false\nevidence_required: false\n"
+        "side_effect_class: READ_ONLY\nrate_limit: {calls_per_minute: 60}\n",
         encoding="utf-8",
     )
     with pytest.raises(CatalogIntegrityError):

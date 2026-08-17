@@ -43,6 +43,20 @@ class CatalogIntegrityError(Exception):
         self.mismatches = mismatches
 
 
+#: ADR-019 -- únicas 5 categorías válidas (prompt maestro, SECURE TOOL
+#: LIFECYCLE). Orden = severidad creciente de efecto secundario.
+SIDE_EFFECT_CLASSES = ("READ_ONLY", "DRY_RUN", "REVERSIBLE_WRITE", "IRREVERSIBLE", "DESTRUCTIVE")
+
+#: Categorías que mcp_gateway.Gateway.authorize() deniega incondicionalmente
+#: en el P0 actual, sin importar scope/target/approval (ADR-019).
+DENIED_IN_P0 = frozenset({"IRREVERSIBLE", "DESTRUCTIVE"})
+
+
+@dataclasses.dataclass(frozen=True)
+class RateLimit:
+    calls_per_minute: int
+
+
 @dataclasses.dataclass(frozen=True)
 class ToolDefinition:
     name: str
@@ -56,6 +70,8 @@ class ToolDefinition:
     target_allowlist_required: bool
     rollback_supported: bool
     evidence_required: bool
+    side_effect_class: str
+    rate_limit: RateLimit
 
     @classmethod
     def from_dict(cls, data: dict) -> ToolDefinition:
@@ -71,6 +87,8 @@ class ToolDefinition:
             target_allowlist_required=data["target_allowlist_required"],
             rollback_supported=data["rollback_supported"],
             evidence_required=data["evidence_required"],
+            side_effect_class=data["side_effect_class"],
+            rate_limit=RateLimit(calls_per_minute=data["rate_limit"]["calls_per_minute"]),
         )
 
 

@@ -16,7 +16,9 @@
     "timeout_seconds",
     "target_allowlist_required",
     "rollback_supported",
-    "evidence_required"
+    "evidence_required",
+    "side_effect_class",
+    "rate_limit"
   ],
   "properties": {
     "name": {
@@ -48,7 +50,21 @@
     "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
     "target_allowlist_required": { "type": "boolean" },
     "rollback_supported": { "type": "boolean" },
-    "evidence_required": { "type": "boolean" }
+    "evidence_required": { "type": "boolean" },
+    "side_effect_class": {
+      "type": "string",
+      "description": "ADR-019 (prompt maestro de arquitectura objetivo, SECURE TOOL LIFECYCLE): 5 categorías exactas. Solo hasta REVERSIBLE_WRITE puede ejecutarse en el P0 actual -- mcp_gateway.Gateway.authorize() deniega IRREVERSIBLE/DESTRUCTIVE incondicionalmente, sin importar scope/approval.",
+      "enum": ["READ_ONLY", "DRY_RUN", "REVERSIBLE_WRITE", "IRREVERSIBLE", "DESTRUCTIVE"]
+    },
+    "rate_limit": {
+      "type": "object",
+      "description": "Límite de llamadas por tool, aplicado por mcp_gateway.Gateway.authorize() con una ventana deslizante de 60s.",
+      "additionalProperties": false,
+      "required": ["calls_per_minute"],
+      "properties": {
+        "calls_per_minute": { "type": "integer", "minimum": 1, "maximum": 1000 }
+      }
+    }
   },
   "allOf": [
     {

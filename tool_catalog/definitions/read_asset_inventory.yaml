@@ -12,3 +12,6 @@ timeout_seconds: 10
 target_allowlist_required: false
 rollback_supported: false
 evidence_required: false
+side_effect_class: READ_ONLY
+rate_limit:
+  calls_per_minute: 60
