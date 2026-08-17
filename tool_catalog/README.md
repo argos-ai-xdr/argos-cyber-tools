@@ -6,11 +6,11 @@
 | [`definitions/`](definitions/) | 5 herramientas reales: 2 de contención (`isolate_kubernetes_workload`, `scale_to_zero`), 1 de monitorización (`increase_monitoring`), 2 de solo lectura |
 | [`risk-levels/README.md`](risk-levels/README.md) | Qué implica cada `risk_level` |
 | [`signatures/`](signatures/) | Manifiesto de integridad SHA-256 real; firma criptográfica (Cosign) pendiente de ARG-002 |
-| [`version_ledger.py`](version_ledger.py) | ADR-019: detecta Version Downgrade — un tool cuya versión baja respecto a la máxima vista antes, aunque su hash de integridad sea válido |
+| [`version_ledger.py`](version_ledger.py) | ADR-053: detecta Version Downgrade — un tool cuya versión baja respecto a la máxima vista antes, aunque su hash de integridad sea válido |
 
 `mcp_gateway` y `policies/approval` importan `tool_catalog.get_tool(name)` — nunca hardcodean sus propias reglas de "qué herramienta necesita aprobación".
 
-## ToolManifest v1 (ADR-019, prompt maestro "SECURE TOOL LIFECYCLE")
+## ToolManifest v1 (ADR-053, prompt maestro "SECURE TOOL LIFECYCLE")
 
 Cada definición declara `side_effect_class` (`READ_ONLY` / `DRY_RUN` /
 `REVERSIBLE_WRITE` / `IRREVERSIBLE` / `DESTRUCTIVE`, las 5 categorías

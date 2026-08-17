@@ -6,7 +6,7 @@
 | [`scale_to_zero.py`](scale_to_zero.py) | `scale_to_zero` | Real, mismo patrón con `FakeReplicaState` |
 | [`cilium.py`](cilium.py) | — | Interfaz para el cliente Cilium real; `kubernetes.py` ya cubre la simulación mientras tanto |
 | [`evidence_verifier.py`](evidence_verifier.py) | — | `verify_artifact_integrity` es real (hash SHA-256); el cliente remoto hacia `evidence_writer` es interfaz pendiente (ARG-023) |
-| [`increase_monitoring.py`](increase_monitoring.py) | `increase_monitoring` | ADR-022 (Fase I): Real, mismo patrón con `FakeMonitoringState` (nivel de verbosidad `normal`/`verbose` por target). Backend elegido: Wazuh (única fuente de telemetría con adapter real hoy) — sin agente Wazuh real desplegado (ARG-003), como el resto de executors |
+| [`increase_monitoring.py`](increase_monitoring.py) | `increase_monitoring` | ADR-056 (Fase I): Real, mismo patrón con `FakeMonitoringState` (nivel de verbosidad `normal`/`verbose` por target). Backend elegido: Wazuh (única fuente de telemetría con adapter real hoy) — sin agente Wazuh real desplegado (ARG-003), como el resto de executors |
 
 Ningún executor de aquí se invoca sin pasar por `mcp_gateway.Gateway.authorize` primero — eso es responsabilidad del llamador (Shuffle, `shuffle/playbooks/`), no de este módulo.
 

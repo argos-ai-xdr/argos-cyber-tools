@@ -43,12 +43,12 @@ class CatalogIntegrityError(Exception):
         self.mismatches = mismatches
 
 
-#: ADR-019 -- únicas 5 categorías válidas (prompt maestro, SECURE TOOL
+#: ADR-053 -- únicas 5 categorías válidas (prompt maestro, SECURE TOOL
 #: LIFECYCLE). Orden = severidad creciente de efecto secundario.
 SIDE_EFFECT_CLASSES = ("READ_ONLY", "DRY_RUN", "REVERSIBLE_WRITE", "IRREVERSIBLE", "DESTRUCTIVE")
 
 #: Categorías que mcp_gateway.Gateway.authorize() deniega incondicionalmente
-#: en el P0 actual, sin importar scope/target/approval (ADR-019).
+#: en el P0 actual, sin importar scope/target/approval (ADR-053).
 DENIED_IN_P0 = frozenset({"IRREVERSIBLE", "DESTRUCTIVE"})
 
 

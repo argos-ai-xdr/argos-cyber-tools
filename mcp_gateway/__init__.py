@@ -5,7 +5,7 @@ capa siguiente (anti token-passthrough) — emite una credencial efímera
 propia por llamada en su lugar (hoy un id opaco; SPIFFE/SPIRE real
 pendiente de ARG-020).
 
-ADR-019 (SECURE TOOL LIFECYCLE) añade dos reglas más: ningún tool con
+ADR-053 (SECURE TOOL LIFECYCLE) añade dos reglas más: ningún tool con
 `side_effect_class` IRREVERSIBLE/DESTRUCTIVE puede autorizarse en el P0
 actual (sin importar scope/target/approval — el catálogo puede declarar
 uno, pero el gateway nunca lo deja pasar), y cada llamada cuenta contra el
@@ -30,7 +30,7 @@ class TokenPassthroughError(Exception):
 
 @dataclasses.dataclass
 class RateLimiter:
-    """Ventana deslizante de 60s en memoria por `tool_name` (ADR-019). En
+    """Ventana deslizante de 60s en memoria por `tool_name` (ADR-053). En
     producción esto vive en un almacén compartido entre réplicas del
     gateway (p. ej. NATS KV), no en memoria de un único proceso — mismo
     caveat ya documentado para ApprovalStore (ARG-020)."""
@@ -94,7 +94,7 @@ class Gateway:
 
         if tool.side_effect_class in DENIED_IN_P0:
             return AuthorizationResult(
-                False, f"side_effect_class '{tool.side_effect_class}' fuera de alcance del P0 (ADR-019, DENY incondicional)"
+                False, f"side_effect_class '{tool.side_effect_class}' fuera de alcance del P0 (ADR-053, DENY incondicional)"
             )
 
         effective_now = now or _now()

@@ -53,7 +53,7 @@
     "evidence_required": { "type": "boolean" },
     "side_effect_class": {
       "type": "string",
-      "description": "ADR-019 (prompt maestro de arquitectura objetivo, SECURE TOOL LIFECYCLE): 5 categorías exactas. Solo hasta REVERSIBLE_WRITE puede ejecutarse en el P0 actual -- mcp_gateway.Gateway.authorize() deniega IRREVERSIBLE/DESTRUCTIVE incondicionalmente, sin importar scope/approval.",
+      "description": "ADR-053 (prompt maestro de arquitectura objetivo, SECURE TOOL LIFECYCLE): 5 categorías exactas. Solo hasta REVERSIBLE_WRITE puede ejecutarse en el P0 actual -- mcp_gateway.Gateway.authorize() deniega IRREVERSIBLE/DESTRUCTIVE incondicionalmente, sin importar scope/approval.",
       "enum": ["READ_ONLY", "DRY_RUN", "REVERSIBLE_WRITE", "IRREVERSIBLE", "DESTRUCTIVE"]
     },
     "rate_limit": {

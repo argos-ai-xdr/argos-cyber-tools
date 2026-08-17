@@ -1,4 +1,4 @@
-"""Version Downgrade detection (ADR-019, SECURE TOOL LIFECYCLE).
+"""Version Downgrade detection (ADR-053, SECURE TOOL LIFECYCLE).
 
 `tool_catalog/signatures/` ya detecta si un archivo de definición cambió
 desde que se firmó el manifiesto (hash SHA-256). Eso NO detecta un

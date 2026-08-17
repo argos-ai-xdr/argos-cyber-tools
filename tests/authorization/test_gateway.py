@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 import pytest
 
@@ -14,7 +15,7 @@ def _gateway():
 
 
 def _tool(name: str, *, side_effect_class: str, calls_per_minute: int = 60, **overrides: object) -> ToolDefinition:
-    base: dict[str, object] = {
+    base: dict[str, Any] = {
         "name": name,
         "version": "1.0.0",
         "risk_level": "low",
@@ -184,7 +185,7 @@ def test_downstream_credential_is_never_the_caller_token_across_many_calls():
     """Chequeo estructural: en 50 llamadas, la credencial descendente nunca
     coincide con el token del llamante — ninguna casualidad de hash.
     `now` avanza 2 minutos por llamada para que el rate_limit de
-    isolate_kubernetes_workload (5/min, ADR-019) no interfiera con lo que
+    isolate_kubernetes_workload (5/min, ADR-053) no interfiera con lo que
     este test realmente comprueba — si degradara a `allowed=False` por
     límite de tasa, `downstream_credential` sería None y la aserción
     pasaría por accidente sin haber probado nada."""
@@ -209,7 +210,7 @@ def test_downstream_credential_is_never_the_caller_token_across_many_calls():
 
 @pytest.mark.parametrize("side_effect_class", ["IRREVERSIBLE", "DESTRUCTIVE"])
 def test_irreversible_and_destructive_tools_are_always_denied_in_p0(side_effect_class):
-    """ADR-019: un tool puede declararse IRREVERSIBLE/DESTRUCTIVE en su
+    """ADR-053: un tool puede declararse IRREVERSIBLE/DESTRUCTIVE en su
     catálogo (el schema lo permite, son categorías válidas de
     ToolManifest v1) pero el gateway nunca lo autoriza en el P0 actual —
     ni con scope correcto, ni con approval, ni en modo read-only."""
@@ -226,7 +227,7 @@ def test_irreversible_and_destructive_tools_are_always_denied_in_p0(side_effect_
 @pytest.mark.parametrize("side_effect_class", ["READ_ONLY", "DRY_RUN", "REVERSIBLE_WRITE"])
 def test_side_effect_classes_up_to_reversible_write_are_not_denied_by_this_rule(side_effect_class):
     """El reverso de la regla anterior: READ_ONLY/DRY_RUN/REVERSIBLE_WRITE
-    no deben chocar con el chequeo de ADR-019 — si el resultado es DENY
+    no deben chocar con el chequeo de ADR-053 — si el resultado es DENY
     aquí, tiene que venir de otra regla (scope/allowlist/approval), nunca
     de side_effect_class."""
     tool = _tool("safe_tool", side_effect_class=side_effect_class)

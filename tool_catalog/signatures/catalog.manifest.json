@@ -1,6 +1,6 @@
 {
   "increase_monitoring": "ecc0f5bb0d20d1289a44461cef8ccfedd3a23b9512ee60a32218d948c47b7b58",
-  "isolate_kubernetes_workload": "3c4c226ec342cee96e40ff34bdd1de6ea36850f087fc2640bb58b642f6bb81fa",
+  "isolate_kubernetes_workload": "46b0d4b6a094238b7b8cfd827f993e6229de94bb024547ff9379970469a57128",
   "read_asset_inventory": "b3f7b9183b4fb6728b7233c12dd23ee3f895680eb740596356b586869a576b27",
   "read_vulnerability_findings": "1fee6ee3071a1bfafeb38198ec76399e982bf89611937f6ff02e601ffd32a13c",
   "scale_to_zero": "ab8264883ab59ed43c2f2ab6d23f74115900a6c18304026db2e0a20347fde110"
