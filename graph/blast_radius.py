@@ -19,6 +19,14 @@ import dataclasses
 
 from graph import ClusterGraph, Subject
 
+_UNCERTAINTY_NOTE = (
+    "Solo se modela alcance DENTRO del namespace observado (siblings de red vía "
+    "NetworkPolicy, subjects vía RoleBinding compartido). Rutas cross-namespace "
+    "(un Ingress u otro namespace que enruta tráfico HACIA este) no se evalúan "
+    "aquí — 'GO' significa 'sin riesgo encontrado dentro de lo modelado', no una "
+    "garantía absoluta (propuesta v0.6.25.4, 12.13: TRUE/FALSE/UNKNOWN se conservan)."
+)
+
 
 @dataclasses.dataclass(frozen=True)
 class BlastRadiusAssessment:
@@ -27,10 +35,26 @@ class BlastRadiusAssessment:
     affected_subjects: tuple[str, ...]
     recommendation: str  # "GO" | "NARROW" | "STOP"
     reason: str
+    evidence_refs: tuple[str, ...]  # NetworkPolicy/RoleBinding examinados (propuesta v0.6.25.4, 12.13)
+    uncertainty: str  # qué NO se modela — nunca se afirma certeza absoluta (TRUE/FALSE/UNKNOWN)
 
 
 def _namespace_has_default_deny(graph: ClusterGraph, namespace: str) -> bool:
     return any(np.namespace == namespace and np.is_default_deny for np in graph.network_policies)
+
+
+def _network_policy_refs(graph: ClusterGraph, namespace: str) -> tuple[str, ...]:
+    return tuple(sorted(f"networkpolicy/{namespace}/{np.name}" for np in graph.network_policies if np.namespace == namespace))
+
+
+def _role_binding_refs(graph: ClusterGraph, subject: Subject) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            f"{rb.kind.lower()}/{rb.namespace or 'cluster'}/{rb.name}"
+            for rb in graph.role_bindings
+            if subject in rb.subjects
+        )
+    )
 
 
 def _affected_services(graph: ClusterGraph, target_namespace: str, target_name: str) -> tuple[str, ...]:
@@ -80,10 +104,14 @@ def assess_blast_radius(
         recommendation = "STOP"
         reason = f"impacto colateral amplio ({total_affected} recursos): requiere revisión humana antes de contener"
 
+    evidence_refs = _network_policy_refs(graph, target_namespace) + _role_binding_refs(graph, subject)
+
     return BlastRadiusAssessment(
         target_service=f"{target_namespace}/{target_service_name}",
         affected_services=affected_services,
         affected_subjects=affected_subjects,
         recommendation=recommendation,
         reason=reason,
+        evidence_refs=evidence_refs,
+        uncertainty=_UNCERTAINTY_NOTE,
     )

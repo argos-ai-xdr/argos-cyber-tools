@@ -81,3 +81,36 @@ def test_shared_binding_does_not_include_the_target_subject_itself():
     )
     assert "argos-cyber-range/gseg-simulado-sa" not in result.affected_subjects
     assert result.affected_subjects == ("argos-cyber-range/co-tenant-sa",)
+
+
+def test_evidence_refs_include_examined_network_policy_and_role_binding():
+    """Propuesta v0.6.25.4 (12.13): 'reglas, incertidumbre y evidence_refs
+    obligatorios' — evidence_refs debe apuntar a lo REALMENTE examinado
+    (nombres reales del grafo), no a un placeholder genérico."""
+    graph = build_graph([SERVICE_TARGET, DEFAULT_DENY_POLICY, CLUSTER_ROLE, BINDING_TWO_SUBJECTS])
+    result = assess_blast_radius(
+        graph, target_namespace="argos-cyber-range", target_service_name="gseg-simulado", subject=TARGET_SUBJECT
+    )
+    assert "networkpolicy/argos-cyber-range/default-deny" in result.evidence_refs
+    assert "clusterrolebinding/cluster/shared-binding" in result.evidence_refs
+
+
+def test_evidence_refs_empty_when_nothing_to_examine():
+    graph = build_graph([SERVICE_TARGET])
+    result = assess_blast_radius(
+        graph, target_namespace="argos-cyber-range", target_service_name="gseg-simulado", subject=TARGET_SUBJECT
+    )
+    assert result.evidence_refs == ()
+
+
+def test_uncertainty_note_is_never_empty_even_when_recommendation_is_go():
+    """'GO' nunca debe leerse como una garantía absoluta: la nota de
+    incertidumbre (TRUE/FALSE/UNKNOWN) debe acompañar cualquier
+    recomendación, incluida la más favorable."""
+    graph = build_graph([SERVICE_TARGET, DEFAULT_DENY_POLICY])
+    result = assess_blast_radius(
+        graph, target_namespace="argos-cyber-range", target_service_name="gseg-simulado", subject=TARGET_SUBJECT
+    )
+    assert result.recommendation == "GO"
+    assert result.uncertainty
+    assert "cross-namespace" in result.uncertainty
