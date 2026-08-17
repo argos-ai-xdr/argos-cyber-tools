@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from executors.increase_monitoring import IncreaseMonitoringExecutor
 from executors.kubernetes import KubernetesExecutor
 from executors.scale_to_zero import ScaleToZeroExecutor
-from rollback.strategies import mark_rolled_back, rollback_isolation, rollback_scale_to_zero
-from rollback.verification import verify_isolation_removed, verify_replicas_restored
+from rollback.strategies import (
+    mark_rolled_back,
+    rollback_increase_monitoring,
+    rollback_isolation,
+    rollback_scale_to_zero,
+)
+from rollback.verification import (
+    verify_isolation_removed,
+    verify_monitoring_restored,
+    verify_replicas_restored,
+)
 
 
 def test_isolate_then_rollback_restores_state(contracts_path):
@@ -78,3 +88,43 @@ def test_rollback_scale_to_zero_when_nothing_was_scaled_is_a_noop_not_a_false_ch
     )
     assert rb["changed_resources"] == []
     assert rb["verification"]["passed"] is True
+
+
+def test_increase_monitoring_then_rollback_restores_original_level(contracts_path):
+    executor = IncreaseMonitoringExecutor(contracts_path)
+    executor.increase_monitoring(run_id="r3", target="deployment/z", dry_run=False, idempotency_key="k-6", action_id="pol-6")
+    assert executor.state.current_level("deployment/z") == "verbose"
+
+    rb = rollback_increase_monitoring(
+        contracts_path, executor.state, run_id="r3", target="deployment/z", idempotency_key="k-6-rb", action_id="pol-6"
+    )
+    assert verify_monitoring_restored(executor.state, "deployment/z")
+    assert executor.state.current_level("deployment/z") == "normal"
+    assert rb["changed_resources"] == ["deployment/z"]  # de verdad revirtió algo
+
+
+def test_rollback_increase_monitoring_when_nothing_was_increased_is_a_noop_not_a_false_change(contracts_path):
+    """Mismo principio que test_rollback_scale_to_zero_when_nothing_was_scaled_is_a_noop_not_a_false_change:
+    un target cuya verbosidad nunca se elevó no debe reportar
+    changed_resources=[target] -- el estado antes y después es idéntico."""
+    executor = IncreaseMonitoringExecutor(contracts_path)
+    rb = rollback_increase_monitoring(
+        contracts_path, executor.state, run_id="r3", target="deployment/never-increased", idempotency_key="k-7-rb", action_id="pol-7"
+    )
+    assert rb["changed_resources"] == []
+    assert rb["verification"]["passed"] is True
+
+
+def test_increase_monitoring_dry_run_does_not_change_state(contracts_path):
+    executor = IncreaseMonitoringExecutor(contracts_path)
+    result = executor.increase_monitoring(run_id="r3", target="deployment/z2", dry_run=True, idempotency_key="k-8", action_id="pol-8")
+    assert result["dry_run"] is True
+    assert result["changed_resources"] == []
+    assert executor.state.current_level("deployment/z2") == "normal"
+
+
+def test_increase_monitoring_retry_with_same_idempotency_key_does_not_reapply_effect(contracts_path):
+    executor = IncreaseMonitoringExecutor(contracts_path)
+    first = executor.increase_monitoring(run_id="r3", target="deployment/z3", dry_run=False, idempotency_key="k-9", action_id="pol-9")
+    second = executor.increase_monitoring(run_id="r3", target="deployment/z3", dry_run=False, idempotency_key="k-9", action_id="pol-9")
+    assert first == second

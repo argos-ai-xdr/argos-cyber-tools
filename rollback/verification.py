@@ -4,6 +4,7 @@ chequeo independiente antes de dar por buena la reversión.
 """
 from __future__ import annotations
 
+from executors.increase_monitoring import FakeMonitoringState
 from executors.kubernetes import FakeClusterState
 from executors.scale_to_zero import FakeReplicaState
 
@@ -14,3 +15,7 @@ def verify_isolation_removed(cluster: FakeClusterState, target: str) -> bool:
 
 def verify_replicas_restored(state: FakeReplicaState, target: str) -> bool:
     return state.current_replicas(target) == state.original_replicas(target)
+
+
+def verify_monitoring_restored(state: FakeMonitoringState, target: str) -> bool:
+    return state.current_level(target) == state.original_level(target)

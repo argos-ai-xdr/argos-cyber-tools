@@ -6,7 +6,7 @@
 | [`scale_to_zero.py`](scale_to_zero.py) | `scale_to_zero` | Real, mismo patrón con `FakeReplicaState` |
 | [`cilium.py`](cilium.py) | — | Interfaz para el cliente Cilium real; `kubernetes.py` ya cubre la simulación mientras tanto |
 | [`evidence_verifier.py`](evidence_verifier.py) | — | `verify_artifact_integrity` es real (hash SHA-256); el cliente remoto hacia `evidence_writer` es interfaz pendiente (ARG-023) |
-| — | `increase_monitoring` | **Sin executor todavía.** `tool_catalog/definitions/increase_monitoring.yaml` la declara `mode: [dry-run, execute]`, `approval_required: false` — `mcp_gateway.Gateway.authorize` la autorizaría hoy, pero no hay ningún código en este repositorio que la ejecute de verdad. Falta decidir contra qué API se "eleva la verbosidad de logging/telemetría" (Falco, Wazuh, el futuro OTel collector de argos-platform) antes de poder escribirlo — no documentado en ningún otro sitio, a diferencia del resto de piezas pendientes de este repo. |
+| [`increase_monitoring.py`](increase_monitoring.py) | `increase_monitoring` | ADR-022 (Fase I): Real, mismo patrón con `FakeMonitoringState` (nivel de verbosidad `normal`/`verbose` por target). Backend elegido: Wazuh (única fuente de telemetría con adapter real hoy) — sin agente Wazuh real desplegado (ARG-003), como el resto de executors |
 
 Ningún executor de aquí se invoca sin pasar por `mcp_gateway.Gateway.authorize` primero — eso es responsabilidad del llamador (Shuffle, `shuffle/playbooks/`), no de este módulo.
 

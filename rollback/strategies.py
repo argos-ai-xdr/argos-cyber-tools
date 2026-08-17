@@ -16,6 +16,7 @@ from executors import (
     new_id_prefixed,
     validate_payload,
 )
+from executors.increase_monitoring import FakeMonitoringState
 from executors.kubernetes import FakeClusterState
 from executors.scale_to_zero import FakeReplicaState
 
@@ -112,6 +113,55 @@ def rollback_scale_to_zero(
         },
     }
     envelope = build_envelope(payload, producer="scale-to-zero-executor-rollback", run_id=run_id, message_id=result_id)
+    full_payload = {**envelope, **payload}
+
+    registry = build_registry(contracts_path)
+    errors = validate_payload(contracts_path, registry, "action-result", full_payload)
+    if errors:
+        raise InvalidActionResult(errors)
+
+    idempotency.remember(idempotency_key, full_payload)
+    return full_payload
+
+
+def rollback_increase_monitoring(
+    contracts_path,
+    state: FakeMonitoringState,
+    *,
+    run_id: str,
+    target: str,
+    idempotency_key: str,
+    action_id: str,
+    idempotency: IdempotencyStore | None = None,
+) -> dict:
+    idempotency = idempotency or IdempotencyStore()
+    cached = idempotency.get(idempotency_key)
+    if cached is not None:
+        return cached
+
+    original = state.original_level(target)
+    was_increased = state.current_level(target) == "verbose"
+    started_at = datetime.datetime.now(datetime.UTC).isoformat()
+    state.levels[target] = (original, original)  # restaura al nivel original conocido
+    ended_at = datetime.datetime.now(datetime.UTC).isoformat()
+
+    result_id = new_id_prefixed("act")
+    payload = {
+        "action_id": action_id,
+        "idempotency_key": idempotency_key,
+        "dry_run": False,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "status": "succeeded",
+        # Mismo principio que rollback_scale_to_zero: solo hay algo que
+        # restaurar si de verdad se había elevado la verbosidad antes.
+        "changed_resources": [target] if was_increased else [],
+        "verification": {
+            "passed": state.current_level(target) == original,
+            "detail": f"verbosidad restaurada a '{original}' para {target}" if was_increased else "no había verbosidad elevada que revertir",
+        },
+    }
+    envelope = build_envelope(payload, producer="increase-monitoring-executor-rollback", run_id=run_id, message_id=result_id)
     full_payload = {**envelope, **payload}
 
     registry = build_registry(contracts_path)
