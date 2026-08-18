@@ -383,6 +383,63 @@ def test_execute_with_verification_result_bound_to_another_tool_is_denied():
     assert "vinculado" in result.reason
 
 
+# ---------------------------------------------------------------------------
+# LÍMITE CONOCIDO Y DOCUMENTADO (no cerrado aquí -- alcance de ARG-023):
+# identidad de plan entre SafetyEnvelope/Approval.
+#
+# SafetyEnvelope v1 real (argos-contracts-scenarios/schemas/safety-envelope,
+# campos literales del prompt maestro) no tiene `plan_hash` -- su identidad
+# es `incident_ref`. Approval v1 real SÍ tiene `action_id` (obligatorio,
+# pensado exactamente para enlazar la aprobación con la acción/decisión
+# concreta), pero ni `ToolCallRequest` (interno de este gateway) ni
+# `policies.approval.ApprovalStore.validate_and_consume` lo leen o exigen
+# hoy -- ambos usan solo el triple (tool, target, action) vía
+# `compute_plan_hash`. Consecuencia real y probada: dos SafetyEnvelope
+# distintos (`incident_ref` distinto, es decir, evaluados por el Safety
+# Kernel para incidentes DIFERENTES) sobre el MISMO tool/target/action son
+# indistinguibles para `_check_safety_chain` -- ambos pasan igual.
+#
+# No es una regresión de R0-01 (R0-01 exigía que la cadena EXISTIERA y
+# fuera internamente consistente; eso ya está probado arriba). Es un límite
+# más profundo que solo importa cuando exista un llamante de producción real
+# con contexto de incidente -- hoy no existe ninguno: `graph.attack_path`
+# es el único constructor real de `ToolCallRequest` en todo argos-cyber-tools
+# (grep sistemático, 2026-08-18) y es validación de seguridad (nunca
+# suministra Approval), no ejecución real. La integración end-to-end
+# recommendation->policy->approval->gateway sigue sin cerrar (ARG-023).
+#
+# Cuando ARG-023 introduzca ese llamante real, este test debe convertirse
+# en una regresión que EXIJA el binding (p. ej. `action_id`/`incident_ref`
+# en `ToolCallRequest`, comprobados en `_check_safety_chain`), no seguir
+# documentando la ausencia.
+# ---------------------------------------------------------------------------
+
+
+def test_known_gap_safety_chain_does_not_bind_incident_identity_across_envelopes():
+    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
+    approval = _approval(plan_hash=plan_hash)
+
+    def _authorize_with_incident(incident_ref: str) -> bool:
+        envelope = _safety_envelope()
+        envelope["incident_ref"] = incident_ref
+        verification = _verification_result(envelope)
+        result = _gateway().authorize(
+            ToolCallRequest(
+                tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+                subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+                approval=approval, safety_envelope=envelope, verification_result=verification,
+            ),
+            current_plan_hash=plan_hash,
+        )
+        return result.allowed
+
+    # Mismo tool/target/action, incident_ref distinto -- ambos se autorizan
+    # igual porque nada en el gateway compara incident_ref con ningún hecho
+    # de la solicitud (no existe tal hecho en ToolCallRequest hoy).
+    assert _authorize_with_incident("incident-A") is True
+    assert _authorize_with_incident("incident-B-completamente-distinto") is True
+
+
 def test_execute_safety_chain_required_even_when_tool_does_not_require_approval():
     """increase_monitoring tiene approval_required=false en su
     ToolManifest real -- pero eso no exime la cadena de seguridad

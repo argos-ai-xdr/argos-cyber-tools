@@ -38,6 +38,17 @@ envelope, y (4) que el `VerificationResult` referencia el MISMO
 de "referencia sellada, no recalculada" que ya usa `independent_verifier`
 con `mission_context_hash` (K.1). Documentado aquí para que no se lea
 como un descuido.
+
+**Límite conocido, no cerrado aquí (alcance de ARG-023)**: la identidad de
+"plan" que este gateway comprueba es el triple (tool, target, action) --
+ni SafetyEnvelope (`incident_ref`) ni Approval (`action_id`, real en el
+contrato pero no leído aquí) se cruzan entre sí. Dos SafetyEnvelope de
+incidentes distintos sobre el mismo tool/target/action son indistinguibles
+hoy (ver `test_known_gap_safety_chain_does_not_bind_incident_identity_
+across_envelopes`, tests/authorization/test_gateway.py). No es explotable
+hoy porque ningún llamante de producción real construye un `ToolCallRequest`
+de ejecución todavía -- `graph.attack_path` es el único, y es validación de
+seguridad, no ejecución real.
 """
 from __future__ import annotations
 
