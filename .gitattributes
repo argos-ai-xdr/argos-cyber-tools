@@ -1,0 +1,8 @@
+# Fuerza LF para archivos hasheados por tool_catalog.signatures (ADR-002,
+# integridad del catalogo) -- sin esto, un checkout Windows (core.autocrlf)
+# produce CRLF localmente mientras un checkout Linux (CI) produce LF, y
+# hashlib.sha256(path.read_bytes()) sobre el fichero de definicion produce
+# valores distintos, invalidando el manifiesto firmado en cualquier
+# checkout que no coincida con el que genero la firma. Encontrado en un
+# run real de CI, 2026-08-18.
+tool_catalog/definitions/*.yaml text eol=lf
