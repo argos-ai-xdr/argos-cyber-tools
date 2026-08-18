@@ -45,6 +45,44 @@ def _request(tool_name: str, action: str = "dry-run") -> ToolCallRequest:
     )
 
 
+def _safety_envelope(
+    *,
+    tool_name: str = "isolate_kubernetes_workload",
+    target: str = "deployment/gseg-simulado",
+    action: str = "execute",
+    valid_until: datetime.datetime | None = None,
+    envelope_hash: str = "sha256:" + "a" * 64,
+) -> dict:
+    """R0-01: fixture de un SafetyEnvelope v1 real, mínimo pero
+    estructuralmente válido -- mismos campos que
+    argos-core/services/safety_kernel._build_envelope_payload."""
+    now = datetime.datetime.now(datetime.UTC)
+    return {
+        "envelope_id": "safenv-test-1",
+        "incident_ref": "inc-test-1",
+        "target_set": [target],
+        "allowed_actions": [action],
+        "forbidden_actions": [],
+        "required_runbook": f"runbooks/{tool_name}.md",
+        "rollback_ref": f"rollback/{tool_name}",
+        "valid_until": (valid_until or (now + datetime.timedelta(minutes=15))).isoformat(),
+        "envelope_hash": envelope_hash,
+        "signature": "sha256:" + "b" * 64,
+    }
+
+
+def _verification_result(
+    envelope: dict,
+    *,
+    tool_name: str = "isolate_kubernetes_workload",
+    target: str = "deployment/gseg-simulado",
+    state: str = "VERIFIED",
+) -> dict:
+    """R0-01: fixture del resultado de Independent Verifier -- referencia
+    el envelope_hash del SafetyEnvelope suministrado, nunca uno propio."""
+    return {"state": state, "envelope_hash": envelope["envelope_hash"], "tool_name": tool_name, "target": target}
+
+
 def test_dry_run_with_correct_scope_and_target_is_allowed():
     result = _gateway().authorize(
         ToolCallRequest(
@@ -90,7 +128,23 @@ def test_target_outside_allowlist_is_denied():
     assert "allowlist" in result.reason
 
 
+def _approval(*, plan_hash: str, approval_id: str = "appr-gw-1") -> dict:
+    now = datetime.datetime.now(datetime.UTC)
+    return {
+        "approval_id": approval_id,
+        "approver_id": "soc-1",
+        "decision": "APPROVE",
+        "expires_at": (now + datetime.timedelta(minutes=5)).isoformat(),
+        "signature_ref": compute_signature_ref(approval_id, plan_hash),
+    }
+
+
 def test_execute_without_approval_is_denied():
+    """Con una cadena de seguridad VÁLIDA pero sin Approval -- Approval
+    sigue siendo obligatoria e independiente (§8 R0-01: Safety Kernel/
+    Verifier nunca sustituyen la autorización humana)."""
+    envelope = _safety_envelope()
+    verification = _verification_result(envelope)
     result = _gateway().authorize(
         ToolCallRequest(
             tool_name="isolate_kubernetes_workload",
@@ -99,6 +153,8 @@ def test_execute_without_approval_is_denied():
             subject="langgraph",
             caller_token="t",
             granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope,
+            verification_result=verification,
         ),
         current_plan_hash="sha256:x",
     )
@@ -107,15 +163,12 @@ def test_execute_without_approval_is_denied():
 
 
 def test_execute_with_valid_approval_is_allowed():
+    """Camino feliz completo tras R0-01: SafetyEnvelope válido +
+    VerificationResult VERIFIED + Approval válida -> allowed."""
     plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
-    now = datetime.datetime.now(datetime.UTC)
-    approval = {
-        "approval_id": "appr-gw-1",
-        "approver_id": "soc-1",
-        "decision": "APPROVE",
-        "expires_at": (now + datetime.timedelta(minutes=5)).isoformat(),
-        "signature_ref": compute_signature_ref("appr-gw-1", plan_hash),
-    }
+    envelope = _safety_envelope()
+    verification = _verification_result(envelope)
+    approval = _approval(plan_hash=plan_hash)
     result = _gateway().authorize(
         ToolCallRequest(
             tool_name="isolate_kubernetes_workload",
@@ -125,8 +178,251 @@ def test_execute_with_valid_approval_is_allowed():
             caller_token="t",
             granted_scopes=frozenset({"cyber.response.execute"}),
             approval=approval,
+            safety_envelope=envelope,
+            verification_result=verification,
         ),
         current_plan_hash=plan_hash,
+    )
+    assert result.allowed is True
+
+
+# ---------------------------------------------------------------------------
+# R0-01: cadena de seguridad obligatoria para action=execute (Definition of
+# Done §15/§16 -- argos-control/architecture/implementation-readiness.md §5).
+# ---------------------------------------------------------------------------
+
+
+def test_execute_with_valid_approval_but_without_safety_envelope_is_denied():
+    """§9 R0-01, prueba de regresión OBLIGATORIA: una Approval históricamente
+    válida (target_allowlist + Approval) YA NO basta por sí sola para
+    autorizar una acción con side effects -- esto es lo que demuestra que
+    R0-01 está realmente cerrado, no solo documentado."""
+    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
+    approval = _approval(plan_hash=plan_hash)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload",
+            target="deployment/gseg-simulado",
+            action="execute",
+            subject="langgraph",
+            caller_token="t",
+            granted_scopes=frozenset({"cyber.response.execute"}),
+            approval=approval,
+            # Deliberadamente SIN safety_envelope/verification_result.
+        ),
+        current_plan_hash=plan_hash,
+    )
+    assert result.allowed is False
+    assert "SafetyEnvelope" in result.reason
+
+
+def test_execute_with_invalid_envelope_hash_format_is_denied():
+    envelope = _safety_envelope(envelope_hash="not-a-real-hash")
+    verification = _verification_result(envelope)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "envelope_hash" in result.reason
+
+
+def test_execute_with_expired_envelope_is_denied():
+    now = datetime.datetime.now(datetime.UTC)
+    envelope = _safety_envelope(valid_until=now - datetime.timedelta(minutes=1))
+    verification = _verification_result(envelope)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+        now=now,
+    )
+    assert result.allowed is False
+    assert "expirado" in result.reason
+
+
+def test_execute_with_target_outside_envelope_is_denied():
+    """El target de la solicitud no está en target_set del envelope --
+    aunque esté en la allowlist del tool (dos comprobaciones distintas,
+    ninguna sustituye a la otra)."""
+    envelope = _safety_envelope(target="deployment/otro-workload")
+    verification = _verification_result(envelope, target="deployment/otro-workload")
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "target_set" in result.reason
+
+
+def test_execute_with_action_outside_envelope_is_denied():
+    envelope = _safety_envelope(action="dry-run")  # el envelope solo autorizó dry-run
+    verification = _verification_result(envelope)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "allowed_actions" in result.reason
+
+
+def test_execute_with_envelope_bound_to_another_tool_is_denied():
+    envelope = _safety_envelope(tool_name="scale_to_zero")  # required_runbook apunta a otro tool
+    verification = _verification_result(envelope)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "vinculado" in result.reason
+
+
+def test_execute_with_missing_verification_result_is_denied():
+    envelope = _safety_envelope()
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope,
+            # Deliberadamente sin verification_result.
+        ),
+    )
+    assert result.allowed is False
+    assert "VerificationResult" in result.reason
+
+
+@pytest.mark.parametrize("state", ["INCONCLUSIVE", "REJECTED"])
+def test_execute_with_non_verified_state_is_denied(state):
+    """INCONCLUSIVE y REJECTED significan lo mismo para ejecución: ZERO
+    EXECUTE (mismo literal que independent_verifier, ADR-055)."""
+    envelope = _safety_envelope()
+    verification = _verification_result(envelope, state=state)
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert state in result.reason
+
+
+def test_execute_with_verification_result_missing_state_is_denied():
+    """Un VerificationResult mal formado (sin `state`) nunca se trata
+    como VERIFIED por defecto -- `None != "VERIFIED"` deniega igual."""
+    envelope = _safety_envelope()
+    verification = {"envelope_hash": envelope["envelope_hash"], "tool_name": "isolate_kubernetes_workload", "target": "deployment/gseg-simulado"}
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+
+
+def test_execute_with_verification_result_referencing_another_envelope_hash_is_denied():
+    """Sustitución/replay entre planes: el VerificationResult referencia
+    un envelope_hash distinto al del SafetyEnvelope realmente
+    suministrado en esta solicitud."""
+    envelope = _safety_envelope()
+    other_envelope = _safety_envelope(envelope_hash="sha256:" + "c" * 64)
+    verification = _verification_result(other_envelope)  # referencia el hash del OTRO envelope
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "envelope_hash" in result.reason
+
+
+def test_execute_with_verification_result_bound_to_another_target_is_denied():
+    envelope = _safety_envelope()
+    verification = _verification_result(envelope, target="deployment/otro-target")
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "vinculado" in result.reason
+
+
+def test_execute_with_verification_result_bound_to_another_tool_is_denied():
+    envelope = _safety_envelope()
+    verification = _verification_result(envelope, tool_name="scale_to_zero")
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is False
+    assert "vinculado" in result.reason
+
+
+def test_execute_safety_chain_required_even_when_tool_does_not_require_approval():
+    """increase_monitoring tiene approval_required=false en su
+    ToolManifest real -- pero eso no exime la cadena de seguridad
+    determinista (SafetyEnvelope+VERIFIED), solo la autorización humana."""
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="increase_monitoring", target="n/a", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.monitor"}),
+            # Deliberadamente sin safety_envelope/verification_result.
+        ),
+    )
+    assert result.allowed is False
+    assert "SafetyEnvelope" in result.reason
+
+
+def test_execute_with_full_valid_safety_chain_and_no_approval_required_is_allowed():
+    """Contraparte positiva del test anterior: con la cadena de seguridad
+    completa y válida, increase_monitoring (approval_required=false) SÍ
+    se autoriza sin Approval -- la exigencia nueva es aditiva, no rompe
+    el diseño ya ratificado de ese tool."""
+    envelope = _safety_envelope(tool_name="increase_monitoring", target="n/a")
+    verification = _verification_result(envelope, tool_name="increase_monitoring", target="n/a")
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="increase_monitoring", target="n/a", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.monitor"}),
+            safety_envelope=envelope, verification_result=verification,
+        ),
+    )
+    assert result.allowed is True
+
+
+def test_dry_run_never_requires_safety_envelope():
+    """§10 R0-01: no se fuerza la cadena completa sobre dry-run/read-only
+    -- solo action=execute causa side effects reales."""
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="dry-run",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+        ),
     )
     assert result.allowed is True
 

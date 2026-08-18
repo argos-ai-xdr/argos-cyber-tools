@@ -10,16 +10,50 @@ ADR-053 (SECURE TOOL LIFECYCLE) añade dos reglas más: ningún tool con
 actual (sin importar scope/target/approval — el catálogo puede declarar
 uno, pero el gateway nunca lo deja pasar), y cada llamada cuenta contra el
 `rate_limit` declarado por el propio tool (ventana deslizante de 60s).
+
+**R0-01 (reconciliación global A→L, 2026-08-17)**: hasta esta versión,
+`authorize()` no exigía SafetyEnvelope ni VerificationResult para
+`action="execute"` — la cadena Safety Kernel→Independent Verifier
+(`argos-core`, ADR-054/055) era correcta y estaba probada de forma
+AISLADA, pero nada en este gateway la consultaba. Esto NO es una
+funcionalidad nueva: es el cierre de un defecto de integración de
+seguridad real (`architecture/implementation-readiness.md` §5, R0-01,
+`argos-control`). Reutiliza exactamente los contratos ya reales de
+`argos-core` (`safety-envelope` v1) como hechos suministrados por el
+llamante — mismo patrón de "caller-supplied facts" que
+`SafetyCheckInput`/`VerificationCheckInput` en `argos-core`, ya que este
+repositorio no puede importar `argos-core` (límite de repos).
+
+**Decisión de diseño explícita sobre `envelope_hash`**: este gateway NO
+recomputa el hash criptográfico del SafetyEnvelope byte a byte —
+hacerlo exigiría reproducir el campo exacto de `safety_kernel.
+_build_envelope_payload` (argos-core) sin poder importarlo, lo que
+crearía un acoplamiento oculto y frágil (un cambio futuro en esa lista
+de campos rompería esta verificación en silencio, sin ningún test
+compartido que lo detecte). En su lugar, el gateway valida: (1) formato
+de `envelope_hash`/`signature` (`sha256:` + 64 hex), (2) vigencia
+(`valid_until`), (3) binding real target/acción/tool contra el
+envelope, y (4) que el `VerificationResult` referencia el MISMO
+`envelope_hash` que el `SafetyEnvelope` suministrado — mismo criterio
+de "referencia sellada, no recalculada" que ya usa `independent_verifier`
+con `mission_context_hash` (K.1). Documentado aquí para que no se lea
+como un descuido.
 """
 from __future__ import annotations
 
 import dataclasses
 import datetime
+import re
 import uuid
 
 from policies.approval import ApprovalRejected, ApprovalStore
 from policies.target_allowlists import load_target_allowlists
 from tool_catalog import DENIED_IN_P0, ToolDefinition, ToolNotFound, load_catalog
+
+#: Mismo patrón que el schema real (safety-envelope v1: `envelope_hash`/
+#: `signature`), usado aquí solo para detectar un valor obviamente
+#: fabricado o corrupto -- no sustituye una recomputación criptográfica.
+_HASH_REF_PATTERN = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 class TokenPassthroughError(Exception):
@@ -61,6 +95,15 @@ class ToolCallRequest:
     caller_token: str
     granted_scopes: frozenset[str]
     approval: dict | None = None
+    #: R0-01: SafetyEnvelope v1 real (argos-core/services/safety_kernel,
+    #: contrato 11) y el resultado de Independent Verifier
+    #: (argos-core/services/independent_verifier), suministrados por el
+    #: llamante -- este gateway no los genera, solo los exige y valida
+    #: para action="execute". Ambos None es el valor por defecto
+    #: deliberadamente inseguro para no-execute (read-only/dry-run no
+    #: causan side effects, ver docstring de Gateway.authorize).
+    safety_envelope: dict | None = None
+    verification_result: dict | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -114,6 +157,11 @@ class Gateway:
             if request.target not in allowlist:
                 return AuthorizationResult(False, f"target '{request.target}' fuera de la allowlist de '{tool.name}'")
 
+        if request.action == "execute":
+            safety_denial = _check_safety_chain(request, tool, now=effective_now)
+            if safety_denial is not None:
+                return AuthorizationResult(False, safety_denial)
+
         if request.action == "execute" and tool.approval_required:
             if request.approval is None:
                 return AuthorizationResult(False, "execute requiere Approval y no se proporcionó ninguna")
@@ -136,6 +184,58 @@ class Gateway:
             raise TokenPassthroughError("la credencial efímera coincidió con el token del llamante")
 
         return AuthorizationResult(True, "autorizado", downstream_credential=downstream_credential)
+
+
+def _check_safety_chain(request: ToolCallRequest, tool: ToolDefinition, *, now: datetime.datetime) -> str | None:
+    """R0-01: cadena de seguridad obligatoria para `action="execute"` --
+    devuelve `None` si la cadena es válida, o el motivo de denegación
+    (fail-closed real: cualquier ausencia/inconsistencia deniega, nunca
+    se asume segura). No decide autorización por sí misma -- Approval
+    sigue siendo la única autoridad (§8 R0-01): esta comprobación solo
+    exige que la evaluación de seguridad/verificación exista y sea
+    consistente ANTES de llegar al chequeo de Approval."""
+    envelope = request.safety_envelope
+    if envelope is None:
+        return "SafetyEnvelope ausente: requerido para action=execute (R0-01)"
+
+    envelope_hash = envelope.get("envelope_hash")
+    if not isinstance(envelope_hash, str) or not _HASH_REF_PATTERN.match(envelope_hash):
+        return "SafetyEnvelope con envelope_hash ausente o con formato inválido"
+
+    valid_until = envelope.get("valid_until")
+    if not isinstance(valid_until, str):
+        return "SafetyEnvelope sin valid_until"
+    try:
+        if now > datetime.datetime.fromisoformat(valid_until):
+            return f"SafetyEnvelope expirado: valid_until={valid_until!r} < now={now.isoformat()!r}"
+    except ValueError:
+        return f"SafetyEnvelope con valid_until ilegible: {valid_until!r}"
+
+    if request.target not in (envelope.get("target_set") or []):
+        return f"target {request.target!r} no está en target_set del SafetyEnvelope"
+
+    if request.action not in (envelope.get("allowed_actions") or []):
+        return f"acción {request.action!r} no está en allowed_actions del SafetyEnvelope"
+
+    expected_runbook = f"runbooks/{tool.name}.md"
+    if envelope.get("required_runbook") != expected_runbook:
+        return f"SafetyEnvelope no está vinculado a {tool.name!r} (required_runbook={envelope.get('required_runbook')!r}, esperado {expected_runbook!r})"
+
+    verification = request.verification_result
+    if verification is None:
+        return "VerificationResult ausente: requerido para action=execute (R0-01)"
+
+    state = verification.get("state")
+    if state != "VERIFIED":
+        return f"VerificationResult.state={state!r} != VERIFIED (ZERO EXECUTE, ADR-055)"
+
+    if verification.get("envelope_hash") != envelope_hash:
+        return "VerificationResult no referencia el envelope_hash del SafetyEnvelope suministrado (posible sustitución/replay entre planes)"
+
+    if verification.get("tool_name") != tool.name or verification.get("target") != request.target:
+        return "VerificationResult no está vinculado al mismo tool/target de esta solicitud"
+
+    return None
 
 
 def _mint_ephemeral_credential() -> str:

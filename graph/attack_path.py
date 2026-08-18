@@ -33,19 +33,25 @@ def validate_attack_path(
     subject_id: str,
     granted_scopes: frozenset[str],
     gateway: Gateway | None = None,
+    safety_envelope: dict | None = None,
+    verification_result: dict | None = None,
 ) -> AttackPathResult:
     """Comprueba si, PESE al permiso RBAC excesivo de `finding`, un intento
     real de `execute` sobre `tool_name`/`target` sigue exigiendo Approval.
 
     - OUT_OF_SCOPE: el gateway rechaza por scope, modo o allowlist antes de
-      llegar a la comprobación de Approval — el path no es explotable con
-      el catálogo de herramientas actual (nada que emular ni bloquear).
-    - GATE_BYPASSED: el gateway autorizó `execute` SIN exigir Approval —
-      fallo real de defensa en profundidad; debe bloquear el gate G3
-      (AC05/AC09), no quedar como hallazgo informativo.
-    - VALIDATED: el gateway exige Approval (execute sin ella se deniega) —
-      el RBAC es excesivo, pero la capa de aprobación humana sigue
-      conteniendo el impacto. Confirma la ruta sin ejecutar nada real.
+      llegar a la comprobación de Approval/cadena de seguridad — el path
+      no es explotable con el catálogo de herramientas actual (nada que
+      emular ni bloquear).
+    - GATE_BYPASSED: el gateway autorizó `execute` SIN exigir ninguna
+      barrera real (Approval, o desde R0-01 también SafetyEnvelope/
+      VerificationResult) — fallo real de defensa en profundidad; debe
+      bloquear el gate G3 (AC05/AC09), no quedar como hallazgo
+      informativo.
+    - VALIDATED: el gateway exige Approval y/o la cadena de seguridad
+      (SafetyEnvelope+VerificationResult, R0-01) — el RBAC es excesivo,
+      pero al menos una capa de contención real sigue bloqueando el
+      impacto. Confirma la ruta sin ejecutar nada real.
     """
     gw = gateway or Gateway()
     request = ToolCallRequest(
@@ -56,6 +62,8 @@ def validate_attack_path(
         caller_token="attack-path-validation",  # nunca sale de este proceso
         granted_scopes=granted_scopes,
         approval=None,  # deliberado: sin aprobación, para comprobar el gate
+        safety_envelope=safety_envelope,
+        verification_result=verification_result,
     )
     try:
         result = gw.authorize(request, current_plan_hash=None)
@@ -74,8 +82,14 @@ def validate_attack_path(
             tool_name=tool_name,
             target=target,
             decision="GATE_BYPASSED",
-            reason="execute fue autorizado SIN Approval — fallo de defensa en profundidad",
+            reason="execute fue autorizado SIN Approval ni cadena de seguridad — fallo de defensa en profundidad",
         )
-    if "Approval" in result.reason:
+    # R0-01: una denegación por falta de SafetyEnvelope/VerificationResult
+    # es una barrera real tan válida como una denegación por Approval --
+    # ambas demuestran que el gate contiene el impacto pese al RBAC
+    # excesivo. "SafetyEnvelope"/"VerificationResult" se comprueban antes
+    # que "Approval" en el gateway real, así que da igual cuál de las dos
+    # frases aparezca primero en el motivo.
+    if any(marker in result.reason for marker in ("Approval", "SafetyEnvelope", "VerificationResult")):
         return AttackPathResult(finding=finding, tool_name=tool_name, target=target, decision="VALIDATED", reason=result.reason)
     return AttackPathResult(finding=finding, tool_name=tool_name, target=target, decision="OUT_OF_SCOPE", reason=result.reason)
