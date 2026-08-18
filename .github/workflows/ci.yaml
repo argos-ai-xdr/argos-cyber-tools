@@ -11,4 +11,9 @@ jobs:
     with:
       working-directory: "."
       contracts-ref: "main"
+      # tool_catalog/signatures/catalog.manifest.json: hashes de
+      # integridad publicados (no secretos) que "Hex High Entropy
+      # String" no puede distinguir de una clave real -- JSON no admite
+      # `pragma: allowlist secret` (encontrado en un run real, 2026-08-18).
+      secrets-scan-exclude: "tool_catalog/signatures/"
     secrets: inherit
