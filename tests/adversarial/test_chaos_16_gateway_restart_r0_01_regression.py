@@ -171,3 +171,56 @@ def test_chaos_16_restart_loses_approval_replay_protection_known_gap(contracts_p
     # y por lo que falla hoy con xfail): el reinicio no debería permitir
     # reconsumir la misma Approval.
     assert outcome_after.authorized is False
+
+
+# ---------------------------------------------------------------------------
+# Cierre real de CH-07/ARG-020 (2026-08-18): el MISMO escenario que el test
+# xfail de arriba, pero inyectando DurableApprovalStore (SQLite) en vez del
+# ApprovalStore en memoria por defecto -- CH-07 pasa de KNOWN_FAILING a
+# PASS cuando el Gateway usa un almacén durable. No se modifica
+# mcp_gateway.Gateway para esto -- ya aceptaba `approval_store` inyectado
+# (ApprovalStoreProtocol); solo cambia QUÉ almacén se le pasa.
+# ---------------------------------------------------------------------------
+
+
+def test_chaos_16_ch07_closed_with_durable_approval_store(tmp_path, contracts_path):
+    from executors.kubernetes import KubernetesExecutor
+    from policies.approval.durable_store import DurableApprovalStore
+
+    envelope_a = _envelope(incident_ref="incident-A", envelope_hash="sha256:" + "a" * 64)
+    verification_a = _verification(envelope_a)
+    plan_hash_a = _plan_hash_for(envelope_a["envelope_hash"])
+    approval_a = _approval(approval_id="appr-chaos16-3", plan_hash=plan_hash_a)
+    request = _request(envelope=envelope_a, verification=verification_a, approval=approval_a)
+
+    db_path = tmp_path / "approvals.db"
+    executor = KubernetesExecutor(contracts_path)
+
+    # Instancia 1 (antes del reinicio): Gateway con DurableApprovalStore,
+    # consume la Approval legítimamente.
+    gateway_before_restart = Gateway(
+        target_allowlists={_TOOL: {_TARGET}}, approval_store=DurableApprovalStore(db_path)
+    )
+    outcome_before = execute_with_authorization(
+        gateway_before_restart, request, executor_call=executor.isolate_workload,
+        run_id="r-chaos16-3a", idempotency_key="k-chaos16-3a", action_id="a-chaos16-3a",
+        current_plan_hash=plan_hash_a,
+    )
+    assert outcome_before.authorized is True
+
+    # "Reinicio": Gateway COMPLETAMENTE NUEVO, con un DurableApprovalStore
+    # TAMBIÉN nuevo -- pero apuntando al MISMO fichero SQLite. Ningún
+    # objeto Python se comparte con la instancia anterior.
+    gateway_after_restart = Gateway(
+        target_allowlists={_TOOL: {_TARGET}}, approval_store=DurableApprovalStore(db_path)
+    )
+    outcome_after = execute_with_authorization(
+        gateway_after_restart, request, executor_call=executor.isolate_workload,
+        run_id="r-chaos16-3b", idempotency_key="k-chaos16-3b", action_id="a-chaos16-3b",
+        current_plan_hash=plan_hash_a,
+    )
+
+    # CH-07: PASS -- a diferencia del test xfail de arriba (ApprovalStore
+    # en memoria), aquí el reinicio SÍ deniega correctamente el replay.
+    assert outcome_after.authorized is False
+    assert "replay" in outcome_after.authorization.reason

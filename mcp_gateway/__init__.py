@@ -75,7 +75,12 @@ import datetime
 import re
 import uuid
 
-from policies.approval import ApprovalRejected, ApprovalStore, compute_plan_hash
+from policies.approval import (
+    ApprovalRejected,
+    ApprovalStore,
+    ApprovalStoreProtocol,
+    compute_plan_hash,
+)
 from policies.target_allowlists import load_target_allowlists
 from tool_catalog import DENIED_IN_P0, ToolDefinition, ToolNotFound, load_catalog
 
@@ -96,7 +101,11 @@ class RateLimiter:
     """Ventana deslizante de 60s en memoria por `tool_name` (ADR-053). En
     producción esto vive en un almacén compartido entre réplicas del
     gateway (p. ej. NATS KV), no en memoria de un único proceso — mismo
-    caveat ya documentado para ApprovalStore (ARG-020)."""
+    caveat que tenía `policies.approval.ApprovalStore` hasta que se
+    cerró con `policies.approval.durable_store.DurableApprovalStore`
+    (2026-08-18); `RateLimiter` sigue pendiente del mismo tratamiento,
+    fuera de alcance de ARG-020 (que es específicamente sobre replay de
+    `Approval`, no sobre rate limiting)."""
 
     _calls: dict[str, list[datetime.datetime]] = dataclasses.field(default_factory=dict)
 
@@ -148,7 +157,7 @@ class Gateway:
         *,
         catalog: dict[str, ToolDefinition] | None = None,
         target_allowlists: dict[str, set[str]] | None = None,
-        approval_store: ApprovalStore | None = None,
+        approval_store: ApprovalStoreProtocol | None = None,
         rate_limiter: RateLimiter | None = None,
     ):
         self._catalog = catalog if catalog is not None else load_catalog()
