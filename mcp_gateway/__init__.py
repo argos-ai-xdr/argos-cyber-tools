@@ -39,16 +39,34 @@ de "referencia sellada, no recalculada" que ya usa `independent_verifier`
 con `mission_context_hash` (K.1). Documentado aquí para que no se lea
 como un descuido.
 
-**Límite conocido, no cerrado aquí (alcance de ARG-023)**: la identidad de
-"plan" que este gateway comprueba es el triple (tool, target, action) --
-ni SafetyEnvelope (`incident_ref`) ni Approval (`action_id`, real en el
-contrato pero no leído aquí) se cruzan entre sí. Dos SafetyEnvelope de
-incidentes distintos sobre el mismo tool/target/action son indistinguibles
-hoy (ver `test_known_gap_safety_chain_does_not_bind_incident_identity_
-across_envelopes`, tests/authorization/test_gateway.py). No es explotable
-hoy porque ningún llamante de producción real construye un `ToolCallRequest`
-de ejecución todavía -- `graph.attack_path` es el único, y es validación de
-seguridad, no ejecución real.
+**R0-01-RESIDUAL, cerrado 2026-08-18 (sonda adversarial del usuario, no
+inspección estática)**: una sonda real (tests/adversarial/
+test_r0_01_residual_incident_confusion.py) demostró EJECUTANDO el ataque
+(executor_call_count == 1, no 0) que, antes de este cierre, una Approval
+firmada bajo el contexto de un incidente A podía autorizar `execute` bajo
+el SafetyEnvelope/VerificationResult de un incidente B distinto sobre el
+mismo tool/target/action -- ni SafetyEnvelope (`incident_ref`) ni Approval
+(`action_id`, real en el contrato pero no leído aquí) se cruzaban entre sí;
+la identidad de "plan" comprobada era solo el triple (tool, target,
+action). Cerrado vinculando `current_plan_hash` al `envelope_hash` del
+SafetyEnvelope de la solicitud (`params={"safety_envelope_hash": ...}` --
+usa el dict abierto que `compute_plan_hash` ya tenía, sin inventar ningún
+campo nuevo en los contratos congelados). `envelope_hash` ya identifica de
+forma criptográfica el contenido íntegro del envelope, `incident_ref`
+incluido -- vincularse a él es más fuerte que vincularse a `incident_ref`
+directamente. La sonda, tras el fix, prueba `executor_call_count == 0`
+para la misma combinación.
+
+Límite que SÍ permanece, documentado y no cerrado aquí (alcance de
+ARG-023): el llamante de producción que compute `current_plan_hash` (hoy
+ninguno existe -- `graph.attack_path` es el único constructor real de
+`ToolCallRequest`, y es validación de seguridad, nunca ejecución) deberá
+incluir `safety_envelope_hash` en `params` con esta misma fórmula;
+`argos-smartops/api/approvals.compute_plan_hash` (que crea la Approval
+real) todavía no lo hace porque `PolicyDecision` v1 no expone
+`envelope_hash` -- haría falta ese hilo completo (Safety Kernel ->
+PolicyDecision -> Approval) para que una Approval real, no solo de test,
+pueda satisfacer este binding.
 """
 from __future__ import annotations
 
@@ -57,7 +75,7 @@ import datetime
 import re
 import uuid
 
-from policies.approval import ApprovalRejected, ApprovalStore
+from policies.approval import ApprovalRejected, ApprovalStore, compute_plan_hash
 from policies.target_allowlists import load_target_allowlists
 from tool_catalog import DENIED_IN_P0, ToolDefinition, ToolNotFound, load_catalog
 
@@ -178,6 +196,36 @@ class Gateway:
                 return AuthorizationResult(False, "execute requiere Approval y no se proporcionó ninguna")
             if current_plan_hash is None:
                 return AuthorizationResult(False, "current_plan_hash es obligatorio para validar la Approval")
+            # R0-01-RESIDUAL (2026-08-18, sonda adversarial del usuario):
+            # request.safety_envelope ya es no-None y válido aquí -- pasó
+            # _check_safety_chain arriba, que se ejecuta para TODO
+            # action=execute, no solo los que requieren Approval. Sin este
+            # binding, current_plan_hash solo dependía de (tool, target,
+            # action): una Approval firmada para el SafetyEnvelope del
+            # incidente A era indistinguible, para el gateway, de una
+            # Approval válida para el SafetyEnvelope de un incidente B
+            # distinto sobre el mismo tool/target/action -- confirmado
+            # EJECUTANDO el ataque (executor_call_count == 1), no solo por
+            # inspección (ver tests/adversarial/
+            # test_r0_01_residual_incident_confusion.py). envelope_hash ya
+            # identifica de forma criptográfica el contenido íntegro del
+            # SafetyEnvelope (incident_ref incluido) -- vincular el plan_hash
+            # a él cierra la sustitución sin inventar ningún campo nuevo en
+            # los contratos congelados (`params` de compute_plan_hash ya era
+            # un dict abierto).
+            assert request.safety_envelope is not None  # garantizado por _check_safety_chain arriba
+            expected_plan_hash = compute_plan_hash(
+                tool=tool.name,
+                target=request.target,
+                action=request.action,
+                params={"safety_envelope_hash": request.safety_envelope["envelope_hash"]},
+            )
+            if current_plan_hash != expected_plan_hash:
+                return AuthorizationResult(
+                    False,
+                    "current_plan_hash no está vinculado al envelope_hash del SafetyEnvelope de esta "
+                    "solicitud (R0-01-RESIDUAL: posible sustitución de contexto entre incidentes)",
+                )
             try:
                 self._approval_store.validate_and_consume(
                     request.approval,

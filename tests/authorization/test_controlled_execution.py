@@ -110,9 +110,12 @@ def test_denied_authorization_never_invokes_executor_missing_approval():
 
 def test_authorized_execution_invokes_executor_exactly_once_with_derived_dry_run():
     gateway = Gateway(target_allowlists={"isolate_kubernetes_workload": {"deployment/gseg-simulado"}})
-    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
     envelope = _safety_envelope(tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado")
     verification = _verification_result(envelope, tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado")
+    plan_hash = compute_plan_hash(
+        tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope["envelope_hash"]},
+    )
     request = ToolCallRequest(
         tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
         subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
@@ -150,9 +153,12 @@ def test_dry_run_execution_invokes_executor_with_dry_run_true():
 def test_real_kubernetes_executor_state_changes_only_when_authorized(contracts_path):
     executor = KubernetesExecutor(contracts_path)
     gateway = Gateway(target_allowlists={"isolate_kubernetes_workload": {"deployment/gseg-simulado"}})
-    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
     envelope = _safety_envelope(tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado")
     verification = _verification_result(envelope, tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado")
+    plan_hash = compute_plan_hash(
+        tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope["envelope_hash"]},
+    )
     request = ToolCallRequest(
         tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
         subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
@@ -186,9 +192,12 @@ def test_real_scale_to_zero_executor_state_changes_only_when_authorized(contract
     executor = ScaleToZeroExecutor(contracts_path)
     executor.state.replicas["deployment/gseg-simulado"] = (3, 3)
     gateway = Gateway(target_allowlists={"scale_to_zero": {"deployment/gseg-simulado"}})
-    plan_hash = compute_plan_hash(tool="scale_to_zero", target="deployment/gseg-simulado", action="execute")
     envelope = _safety_envelope(tool_name="scale_to_zero", target="deployment/gseg-simulado")
     verification = _verification_result(envelope, tool_name="scale_to_zero", target="deployment/gseg-simulado")
+    plan_hash = compute_plan_hash(
+        tool="scale_to_zero", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope["envelope_hash"]},
+    )
     request = ToolCallRequest(
         tool_name="scale_to_zero", target="deployment/gseg-simulado", action="execute",
         subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),

@@ -163,11 +163,15 @@ def test_execute_without_approval_is_denied():
 
 
 def test_execute_with_valid_approval_is_allowed():
-    """Camino feliz completo tras R0-01: SafetyEnvelope válido +
-    VerificationResult VERIFIED + Approval válida -> allowed."""
-    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
+    """Camino feliz completo tras R0-01(-RESIDUAL): SafetyEnvelope válido +
+    VerificationResult VERIFIED + Approval vinculada al envelope_hash de
+    ESTE SafetyEnvelope -> allowed."""
     envelope = _safety_envelope()
     verification = _verification_result(envelope)
+    plan_hash = compute_plan_hash(
+        tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope["envelope_hash"]},
+    )
     approval = _approval(plan_hash=plan_hash)
     result = _gateway().authorize(
         ToolCallRequest(
@@ -384,60 +388,90 @@ def test_execute_with_verification_result_bound_to_another_tool_is_denied():
 
 
 # ---------------------------------------------------------------------------
-# LÍMITE CONOCIDO Y DOCUMENTADO (no cerrado aquí -- alcance de ARG-023):
-# identidad de plan entre SafetyEnvelope/Approval.
+# R0-01-RESIDUAL, cerrado 2026-08-18: identidad de plan entre
+# SafetyEnvelope/Approval.
 #
-# SafetyEnvelope v1 real (argos-contracts-scenarios/schemas/safety-envelope,
-# campos literales del prompt maestro) no tiene `plan_hash` -- su identidad
-# es `incident_ref`. Approval v1 real SÍ tiene `action_id` (obligatorio,
-# pensado exactamente para enlazar la aprobación con la acción/decisión
-# concreta), pero ni `ToolCallRequest` (interno de este gateway) ni
-# `policies.approval.ApprovalStore.validate_and_consume` lo leen o exigen
-# hoy -- ambos usan solo el triple (tool, target, action) vía
-# `compute_plan_hash`. Consecuencia real y probada: dos SafetyEnvelope
-# distintos (`incident_ref` distinto, es decir, evaluados por el Safety
-# Kernel para incidentes DIFERENTES) sobre el MISMO tool/target/action son
-# indistinguibles para `_check_safety_chain` -- ambos pasan igual.
+# Una sonda adversarial real (tests/adversarial/
+# test_r0_01_residual_incident_confusion.py) demostró EJECUTANDO el ataque
+# (executor_call_count == 1, no solo por inspección estática) que, antes de
+# este cierre, una Approval firmada bajo el SafetyEnvelope de un incidente A
+# autorizaba `execute` igual de bien bajo el SafetyEnvelope de un incidente
+# B distinto sobre el mismo tool/target/action -- ni SafetyEnvelope
+# (`incident_ref`) ni Approval (`action_id`, real en el contrato pero no
+# leído aquí) se cruzaban entre sí; la identidad de plan comprobada era solo
+# el triple (tool, target, action). Cerrado vinculando `current_plan_hash`
+# al `envelope_hash` de la solicitud (`params={"safety_envelope_hash": ...}`
+# en `compute_plan_hash`, ver `mcp_gateway.Gateway.authorize`).
 #
-# No es una regresión de R0-01 (R0-01 exigía que la cadena EXISTIERA y
-# fuera internamente consistente; eso ya está probado arriba). Es un límite
-# más profundo que solo importa cuando exista un llamante de producción real
-# con contexto de incidente -- hoy no existe ninguno: `graph.attack_path`
-# es el único constructor real de `ToolCallRequest` en todo argos-cyber-tools
-# (grep sistemático, 2026-08-18) y es validación de seguridad (nunca
-# suministra Approval), no ejecución real. La integración end-to-end
-# recommendation->policy->approval->gateway sigue sin cerrar (ARG-023).
-#
-# Cuando ARG-023 introduzca ese llamante real, este test debe convertirse
-# en una regresión que EXIJA el binding (p. ej. `action_id`/`incident_ref`
-# en `ToolCallRequest`, comprobados en `_check_safety_chain`), no seguir
-# documentando la ausencia.
+# El test de abajo prueba deliberadamente el límite MÁS estrecho que
+# permanece: `incident_ref` en sí mismo, aislado de `envelope_hash`, sigue
+# sin comprobarse -- pero eso es correcto y no explotable, porque
+# `envelope_hash` (real, `argos-core/services/safety_kernel`) es un hash
+# criptográfico sobre el contenido íntegro del envelope, `incident_ref`
+# incluido: dos incidentes distintos producen, por construcción,
+# `envelope_hash` distintos. Este test lo mantiene artificialmente igual
+# (mutando `incident_ref` sin recalcular `envelope_hash`) solo para
+# demostrar el límite exacto de lo que el gateway comprueba.
 # ---------------------------------------------------------------------------
 
 
-def test_known_gap_safety_chain_does_not_bind_incident_identity_across_envelopes():
-    plan_hash = compute_plan_hash(tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute")
+def test_incident_ref_alone_is_not_bound_but_envelope_hash_is():
+    """`incident_ref` no se compara nunca directamente -- solo importa a
+    través de `envelope_hash` (real, criptográfico, fuera del alcance de
+    este repositorio). Con `envelope_hash` fijo (simulando, sin poder
+    reproducirlo aquí, una colisión que en la práctica no ocurre), cambiar
+    solo `incident_ref` sigue sin bloquear la autorización -- residual
+    aceptado y documentado, no un nuevo R0."""
+    envelope = _safety_envelope()
+    plan_hash = compute_plan_hash(
+        tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope["envelope_hash"]},
+    )
     approval = _approval(plan_hash=plan_hash)
 
     def _authorize_with_incident(incident_ref: str) -> bool:
-        envelope = _safety_envelope()
-        envelope["incident_ref"] = incident_ref
-        verification = _verification_result(envelope)
+        env = dict(envelope)
+        env["incident_ref"] = incident_ref  # envelope_hash NO se recalcula (limitación del fixture, no del gateway)
+        verification = _verification_result(env)
         result = _gateway().authorize(
             ToolCallRequest(
                 tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
                 subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
-                approval=approval, safety_envelope=envelope, verification_result=verification,
+                approval=approval, safety_envelope=env, verification_result=verification,
             ),
             current_plan_hash=plan_hash,
         )
         return result.allowed
 
-    # Mismo tool/target/action, incident_ref distinto -- ambos se autorizan
-    # igual porque nada en el gateway compara incident_ref con ningún hecho
-    # de la solicitud (no existe tal hecho en ToolCallRequest hoy).
     assert _authorize_with_incident("incident-A") is True
     assert _authorize_with_incident("incident-B-completamente-distinto") is True
+
+
+def test_approval_bound_to_one_envelope_hash_is_rejected_for_a_different_envelope():
+    """Confirmación directa del cierre de R0-01-RESIDUAL a nivel de
+    Gateway: una Approval con `current_plan_hash` vinculado al
+    `envelope_hash` de un SafetyEnvelope A es rechazada cuando la
+    solicitud real trae un SafetyEnvelope B distinto -- aunque tool/
+    target/action coincidan y B sea, en todo lo demás, válido."""
+    envelope_a = _safety_envelope(envelope_hash="sha256:" + "a" * 64)
+    envelope_b = _safety_envelope(envelope_hash="sha256:" + "b" * 64)
+    verification_b = _verification_result(envelope_b)
+    plan_hash_bound_to_a = compute_plan_hash(
+        tool="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+        params={"safety_envelope_hash": envelope_a["envelope_hash"]},
+    )
+    approval = _approval(plan_hash=plan_hash_bound_to_a)
+
+    result = _gateway().authorize(
+        ToolCallRequest(
+            tool_name="isolate_kubernetes_workload", target="deployment/gseg-simulado", action="execute",
+            subject="langgraph", caller_token="t", granted_scopes=frozenset({"cyber.response.execute"}),
+            approval=approval, safety_envelope=envelope_b, verification_result=verification_b,
+        ),
+        current_plan_hash=plan_hash_bound_to_a,
+    )
+    assert result.allowed is False
+    assert "R0-01-RESIDUAL" in result.reason
 
 
 def test_execute_safety_chain_required_even_when_tool_does_not_require_approval():
