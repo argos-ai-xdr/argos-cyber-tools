@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from graph import ClusterGraph
+from graph.model import ClusterGraph
 
 _EXTERNALLY_REACHABLE_SERVICE_TYPES = {"NodePort", "LoadBalancer"}
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from graph import ClusterGraph, Subject
+from graph.model import ClusterGraph, Subject
 
 _UNCERTAINTY_NOTE = (
     "Solo se modela alcance DENTRO del namespace observado (siblings de red vía "

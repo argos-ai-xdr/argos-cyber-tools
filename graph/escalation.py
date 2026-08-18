@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from graph import ClusterGraph, PolicyRule, Subject
+from graph.model import ClusterGraph, PolicyRule, Subject
 
 # (recursos, verbos, motivo) — cualquier PolicyRule cuyos recursos/verbos
 # tengan intersección no vacía con AMBOS conjuntos aquí se considera
